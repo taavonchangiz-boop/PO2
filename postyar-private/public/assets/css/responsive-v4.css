@@ -1,0 +1,119 @@
+/* Postyar Responsive System v4 — structural reflow, not visual compression. */
+:root{--mobile-nav-height:76px;--ui-content:1440px}
+html{overflow-x:hidden}
+body{min-width:0;overflow-x:hidden}
+*,*::before,*::after{box-sizing:border-box}
+img,svg,video,canvas{max-width:100%}
+button,input,select,textarea{max-width:100%}
+
+/* Landing navigation: one real desktop navigation + one real mobile drawer. */
+#navbar{display:block!important;visibility:visible!important;opacity:1!important}
+#navbar .landing-desktop-menu{display:flex!important;align-items:center;justify-content:center;gap:clamp(12px,1.5vw,28px);min-width:0;flex:1}
+#navbar .landing-desktop-menu a{display:inline-flex!important;align-items:center;justify-content:center;min-height:40px;white-space:nowrap}
+#navbar .landing-actions{display:flex!important;align-items:center;gap:8px;flex:0 0 auto}
+#navbar #mobileToggle{display:none!important}
+#mobileMenu{position:fixed!important;inset:0!important;z-index:5000!important;width:100vw!important;min-height:100dvh!important;overflow-y:auto!important;overscroll-behavior:contain!important}
+#mobileMenu.hidden{display:none!important}
+#mobileMenu.is-open{display:flex!important}
+.modal{position:fixed!important;inset:0!important;width:100vw!important;height:100dvh!important;z-index:6000!important;display:none!important;align-items:center!important;justify-content:center!important;padding:20px!important;background:rgba(2,6,23,.78)!important;backdrop-filter:blur(12px)!important;-webkit-backdrop-filter:blur(12px)!important;overflow-y:auto!important;overscroll-behavior:contain!important}
+.modal.show{display:flex!important;visibility:visible!important;opacity:1!important;pointer-events:auto!important}
+.modal-content{position:relative!important;width:min(100%,560px)!important;max-width:560px!important;max-height:calc(100dvh - 40px)!important;overflow-y:auto!important;overflow-x:hidden!important;margin:auto!important;flex:0 1 auto!important}
+
+/* Universal dashboard/admin shell. */
+.wrapper,.g-main,.page-wrapper,.content,.right_col,.dashboard-content,.admin-content,.admin-main{min-width:0!important;max-width:100%!important}
+.card,.panel,.data-card,.settings-card,.surface-card,.plan-card,.ticket-card,.payment-card,.user-card,.email-card,.ad-card{min-width:0!important;max-width:100%!important}
+.page-header,.section-header,.panel-header,.toolbar,.filter-bar,.action-bar,.actions-row,.button-row,.form-actions{display:flex;flex-wrap:wrap;align-items:center;gap:12px;min-width:0}
+.page-header>*,.section-header>*,.panel-header>*,.toolbar>*,.filter-bar>*,.action-bar>*,.actions-row>*,.button-row>*,.form-actions>*{min-width:0}
+
+/* Dense data is allowed to scroll horizontally; it must never squash columns into unreadable content. */
+.table-responsive,.table-scroll,.data-table-wrap,.table-container,.responsive-table,.responsive-table-shell{display:block;width:100%;max-width:100%;overflow-x:auto!important;overflow-y:hidden!important;-webkit-overflow-scrolling:touch;overscroll-behavior-x:contain}
+.table-responsive>table,.table-scroll>table,.data-table-wrap>table,.table-container>table,.responsive-table>table,.responsive-table-shell>table{width:100%;min-width:720px;border-collapse:separate}
+.admin-table,.users-table,.payments-table,.tickets-table,.ads-table,.email-table,.data-table{width:100%;min-width:720px}
+.admin-table th,.admin-table td,.users-table th,.users-table td,.payments-table th,.payments-table td,.tickets-table th,.tickets-table td,.ads-table th,.ads-table td,.email-table th,.email-table td,.data-table th,.data-table td{vertical-align:middle;word-break:normal;overflow-wrap:anywhere}
+
+/* Forms reflow to real rows/columns instead of compressed controls. */
+.form-grid,.settings-grid,.settings-form-grid,.form-row,.form-columns{min-width:0}
+input,select,textarea,.form-control{min-width:0}
+
+/* Mobile navigation: persistent, usable, and never hidden behind content. */
+@media(max-width:1023px){
+  body{padding-bottom:calc(var(--mobile-nav-height) + 26px + env(safe-area-inset-bottom))!important}
+  .topbar{position:sticky!important;top:0!important;z-index:1700!important}
+  .content,.right_col,.dashboard-content,.admin-content,.page-wrapper,.admin-main{width:100%!important;max-width:100%!important;margin-inline:0!important;padding-inline:clamp(12px,3vw,24px)!important}
+  .g-sidebar{z-index:3000!important}
+  .mobile-nav{display:grid!important;position:fixed!important;left:12px!important;right:12px!important;bottom:calc(10px + env(safe-area-inset-bottom))!important;width:auto!important;height:66px!important;padding:6px!important;grid-template-columns:repeat(5,minmax(0,1fr))!important;gap:5px!important;z-index:4500!important;background:linear-gradient(180deg,rgba(15,23,42,.97),rgba(5,10,20,.97))!important;border:1px solid rgba(148,163,184,.28)!important;border-radius:22px!important;box-shadow:0 18px 50px rgba(0,0,0,.55),0 0 0 1px rgba(129,140,248,.08)!important;backdrop-filter:blur(22px) saturate(170%)!important;-webkit-backdrop-filter:blur(22px) saturate(170%)!important}
+  .mobile-nav-item{min-width:0!important;min-height:52px!important;display:flex!important;flex-direction:column!important;align-items:center!important;justify-content:center!important;gap:3px!important;padding:5px 4px!important;border-radius:16px!important;border:1px solid transparent!important;color:#94a3b8!important;cursor:pointer!important;transition:transform .18s ease,background .18s ease,border-color .18s ease,box-shadow .18s ease,color .18s ease!important;position:relative!important}
+  .mobile-nav-item svg{width:21px!important;height:21px!important;flex:0 0 auto!important}
+  .mobile-nav-item span{font-size:9.5px!important;line-height:1.2!important;font-weight:800!important;white-space:nowrap!important;overflow:hidden!important;text-overflow:ellipsis!important;max-width:100%!important}
+  .mobile-nav-item.active{color:#f8fafc!important;background:linear-gradient(145deg,rgba(99,102,241,.30),rgba(34,211,238,.09))!important;border-color:rgba(129,140,248,.42)!important;box-shadow:inset 0 0 0 1px rgba(255,255,255,.035),0 8px 22px rgba(79,70,229,.18)!important}
+  .mobile-nav-item.active::after{content:"";position:absolute;bottom:3px;width:18px;height:3px;border-radius:99px;background:linear-gradient(90deg,#818cf8,#22d3ee);box-shadow:0 0 12px rgba(129,140,248,.6)}
+  .mobile-nav-item:active{transform:scale(.94)}
+
+  /* Real reflow for cards and controls. */
+  .grid-stats,.stats-grid,.dashboard-stats,.admin-stats{display:grid!important;grid-template-columns:repeat(2,minmax(0,1fr))!important;gap:12px!important}
+  .form-grid,.settings-grid,.settings-form-grid,.form-row,.form-columns{display:grid!important;grid-template-columns:1fr!important;gap:14px!important}
+  .form-group{min-width:0!important;width:100%!important}
+  .form-group input,.form-group select,.form-group textarea,.form-control{width:100%!important;min-height:46px!important;font-size:16px!important}
+  textarea{min-height:130px!important}
+  .button-row,.form-actions,.actions-row{display:flex!important;flex-wrap:wrap!important;width:100%!important}
+  .button-row>* ,.form-actions>* ,.actions-row>*{flex:1 1 180px!important;min-width:160px!important}
+  .settings-layout,.email-layout,.ticket-layout,.ticket-grid,.ticket-list,.admin-layout{display:flex!important;flex-direction:column!important;gap:14px!important;width:100%!important;min-width:0!important}
+  .ticket-item,.ticket-message,.ticket-card,.payment-card,.ad-card,.user-card,.email-card{width:100%!important;min-width:0!important;overflow-wrap:anywhere!important}
+  .ticket-message pre,.ticket-message code{white-space:pre-wrap!important;overflow-wrap:anywhere!important}
+  .card,.panel,.data-card,.settings-card,.surface-card,.plan-card{width:100%!important}
+
+  /* Admin/user toolbars become real multi-line toolbars. */
+  .toolbar,.filter-bar,.action-bar,.page-header,.section-header,.panel-header{align-items:stretch!important}
+  .toolbar>*,.filter-bar>*,.action-bar>*,.page-header>*,.section-header>*,.panel-header>*{flex:1 1 220px!important}
+  .toolbar button,.filter-bar button,.action-bar button,.page-header button,.section-header button{min-height:44px!important}
+
+  /* Modals become bottom sheets on small screens, with full readable form rows. */
+  .modal{align-items:flex-end!important;padding:10px!important}
+  .modal-content{width:100%!important;max-width:680px!important;max-height:calc(100dvh - 20px)!important;border-radius:24px 24px 16px 16px!important;padding:18px!important}
+  .close-btn{min-width:44px!important;min-height:44px!important}
+
+  /* Landing header: logo + compact actions + hamburger. Desktop menu is replaced by drawer. */
+  #navbar{padding:8px 10px!important}
+  #navbar .glass-light{padding:8px 10px!important}
+  #navbar .landing-desktop-menu{display:none!important}
+  #navbar .landing-actions{display:flex!important;gap:6px!important}
+  #navbar #mobileToggle{display:grid!important;place-items:center!important;order:-1!important;min-width:44px!important;min-height:44px!important}
+  #navbar .landing-actions>button:not(#mobileToggle){min-height:44px!important;padding:9px 12px!important;white-space:nowrap!important}
+  #mobileMenu{display:none!important;align-items:stretch!important;justify-content:space-between!important;padding:18px!important;background:rgba(5,9,18,.985)!important}
+  #mobileMenu.is-open{display:flex!important}
+  #mobileMenu>div:last-child{width:100%!important}
+  #mobileMenu a,#mobileMenu button{min-height:50px!important;width:100%!important}
+  #mobileMenu .flex-col{gap:8px!important}
+
+  /* Landing sections: preserve content; reflow columns instead of shrinking. */
+  .plans-container{display:grid!important;grid-template-columns:1fr!important;gap:18px!important}
+  .plans-container .plan-card{width:100%!important;min-width:0!important}
+  .overflow-x-auto{max-width:100%!important;overflow-x:auto!important}
+}
+
+@media(max-width:767px){
+  .grid-stats,.stats-grid,.dashboard-stats,.admin-stats{grid-template-columns:1fr!important}
+  .mobile-nav{left:7px!important;right:7px!important;bottom:calc(7px + env(safe-area-inset-bottom))!important}
+  .mobile-nav-item span{font-size:8.5px!important}
+  .mobile-nav-item svg{width:20px!important;height:20px!important}
+  .topbar-right{gap:5px!important}
+  .tb-plan,.admin-badge{max-width:34vw!important;overflow:hidden!important;text-overflow:ellipsis!important;white-space:nowrap!important}
+  #navbar .landing-actions>button:not(#mobileToggle){font-size:11px!important;padding-inline:9px!important}
+  #navbar .landing-actions>button:not(#mobileToggle):first-of-type{display:none!important}
+  #mobileMenu{padding:16px!important}
+  .modal-content{padding:16px!important}
+}
+
+@media(min-width:768px) and (max-width:1023px){
+  #navbar .landing-actions>button:not(#mobileToggle){font-size:12px!important;padding-inline:12px!important}
+  .form-row,.form-grid.two-column,.settings-grid.two-column{grid-template-columns:repeat(2,minmax(0,1fr))!important}
+}
+
+@media(min-width:1024px){
+  .mobile-nav,.mobile-more-overlay,.mobile-more-drawer{display:none!important}
+  #navbar .landing-desktop-menu{display:flex!important}
+  #navbar .landing-actions{display:flex!important}
+  #navbar #mobileToggle,#mobileMenu{display:none!important}
+}
+
+@media(prefers-reduced-motion:reduce){.mobile-nav-item{transition:none!important}}

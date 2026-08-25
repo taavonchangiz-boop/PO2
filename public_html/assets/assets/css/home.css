@@ -1,0 +1,280 @@
+/* ============================================================
+   پُست‌یار × Gentelella v4 (Dark) — لندینگ عمومی
+   پوسته تیره Gentelella روی نشانه‌گذاری Tailwind (بدون تغییر JS)
+   ============================================================ */
+
+/* ---------- پایه تیره (Gentelella dark) ---------- */
+body{
+  font-family:Vazirmatn,Tahoma,sans-serif!important;
+  color:#F5EFE3!important;
+  background-color:#0C0A08!important;
+  background-image:
+    radial-gradient(ellipse 60% 50% at 85% -5%,rgba(214,172,99,.07),transparent),
+    radial-gradient(ellipse 50% 40% at 0% 30%,rgba(85,201,164,.05),transparent);
+  overflow-x:hidden;
+}
+html{scroll-behavior:smooth;overflow-x:hidden;background:#0C0A08}
+::selection{background:rgba(214,172,99,.32);color:#FFF6E3}
+::-webkit-scrollbar{width:8px}
+::-webkit-scrollbar-track{background:#0C0A08}
+::-webkit-scrollbar-thumb{background:rgba(255,255,255,.14);border-radius:99px}
+::-webkit-scrollbar-thumb:hover{background:rgba(255,255,255,.24)}
+
+/* کلاس‌های پس‌زمینه دلخواه Tailwind → تیره */
+body.bg-\[\#0a0a0a\],body.bg-\[\#0F1623\]{background-color:#0C0A08!important}
+.bg-\[\#0c0c10\]{background-color:#171310!important}
+.bg-\[\#111116\]{background-color:#1E1A14!important}
+.bg-\[\#0a0a0a\]\/95{background-color:rgba(12,10,8,.97)!important}
+
+/* متن‌های Tailwind روی زمینه تیره */
+.text-neutral-100{color:#F5EFE3!important}
+.text-neutral-200{color:#E9E2D3!important}
+.text-neutral-300{color:#DCD3C4!important}
+.text-neutral-400{color:#A99E8E!important}
+.text-neutral-500{color:#A99E8E!important}
+.text-neutral-300:hover,.text-neutral-400:hover{color:#E9C77E!important}
+.border-neutral-800\/60,.border-neutral-800{border-color:rgba(255,255,255,.08)!important}
+.border-neutral-800\/80{border-color:rgba(255,255,255,.08)!important}
+.border-neutral-700\/80,.border-neutral-700{border-color:rgba(255,255,255,.14)!important}
+.bg-white\/\[0\.04\]{background:rgba(255,255,255,.04)!important}
+.bg-white\/5{background:rgba(255,255,255,.05)!important}
+.bg-white\/10{background:rgba(255,255,255,.07)!important}
+
+/* ---------- ناوبری (Gentelella dark glass) ---------- */
+#navbar{padding-top:12px;padding-bottom:12px;transition:padding .3s,background .3s,box-shadow .3s}
+#navbar .glass-light{
+  background:rgba(18,15,11,.85)!important;
+  border:1px solid rgba(255,255,255,.1)!important;
+  backdrop-filter:blur(14px) saturate(140%);
+  -webkit-backdrop-filter:blur(14px) saturate(140%);
+  box-shadow:0 8px 28px rgba(0,0,0,.4)!important;
+  border-radius:14px!important;
+  color:#e6ebf2;
+}
+#navbar .glass-light:hover{border-color:rgba(255,255,255,.18)!important}
+.glass,.glass-light{
+  border:1px solid rgba(240,234,222,.1);
+  background:rgba(23,19,16,.75);
+  backdrop-filter:blur(12px);
+  -webkit-backdrop-filter:blur(12px);
+  box-shadow:0 6px 22px rgba(0,0,0,.4);
+  color:#F5EFE3;
+}
+.glass-light span,.glass-light p,.glass-light div{color:inherit}
+
+/* ---------- مش و نویز ---------- */
+.mesh-bg{background-image:
+  radial-gradient(640px 420px at 88% 8%,rgba(26,187,156,.09),transparent 62%),
+  radial-gradient(520px 420px at 6% 34%,rgba(66,153,225,.06),transparent 60%)}
+.noise:before{opacity:.35}
+
+/* ---------- انیمیشن‌ها ---------- */
+@keyframes gtGradient{0%,100%{background-position:0% 50%}50%{background-position:100% 50%}}
+.gradient-animate{background-size:220% auto;animation:gtGradient 7s ease infinite}
+@keyframes gtFloat{0%,100%{transform:translateY(0)}50%{transform:translateY(-10px)}}
+.float-animation{animation:gtFloat 6s ease-in-out infinite}
+.float-animation-delay{animation:gtFloat 7.5s ease-in-out 1.2s infinite}
+.float-animation-delay2{animation:gtFloat 8.5s ease-in-out 2.1s infinite}
+@keyframes gtPulse{
+  0%,100%{box-shadow:0 8px 26px rgba(26,187,156,.28)}
+  50%{box-shadow:0 8px 42px rgba(26,187,156,.48)}
+}
+.pulse-glow{animation:gtPulse 3.4s ease-in-out infinite}
+.pulse-glow:hover{animation-play-state:paused}
+.reveal{
+  opacity:0;transform:translateY(22px);
+  transition:opacity .65s cubic-bezier(.2,0,0,1),transform .65s cubic-bezier(.2,0,0,1);
+  will-change:opacity,transform;
+}
+.reveal.active{opacity:1;transform:none}
+.reveal-delay-1{transition-delay:.12s}
+.reveal-delay-2{transition-delay:.24s}
+.reveal-delay-3{transition-delay:.36s}
+
+/* ---------- منوی موبایل (تیره) ---------- */
+#mobileMenu{
+  z-index:60;
+  background:rgba(12,10,8,.98)!important;
+  backdrop-filter:blur(18px);-webkit-backdrop-filter:blur(18px);
+}
+#mobileMenu a{color:#DCD3C4!important;font-weight:600}
+#mobileMenu a:hover{color:#E9C77E!important}
+
+/* ---------- کارت‌ها ---------- */
+.card-glow{transition:box-shadow 200ms,transform 200ms cubic-bezier(.2,0,0,1),border-color 200ms}
+.card-glow:hover{
+  transform:translateY(-3px);
+  border-color:rgba(214,172,99,.4)!important;
+  box-shadow:0 10px 30px rgba(0,0,0,.5),0 0 24px rgba(214,172,99,.07)!important;
+}
+.card-glow:before{display:none}
+.border-gradient{position:relative}
+.border-gradient:before{
+  content:"";position:absolute;inset:-1px;border-radius:calc(1.5rem + 1px);
+  padding:1.5px;
+  background:linear-gradient(135deg,rgba(26,187,156,.5),rgba(66,153,225,.28),rgba(192,105,221,.22));
+  -webkit-mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0);
+  -webkit-mask-composite:xor;mask-composite:exclude;
+  pointer-events:none;
+}
+
+/* ---------- مارکی ---------- */
+@keyframes gtMarquee{from{transform:translateX(0)}to{transform:translateX(50%)}}
+.marquee-track{animation:gtMarquee 36s linear infinite;direction:ltr}
+.marquee-track:hover{animation-play-state:paused}
+.marquee-track span{direction:rtl;color:#A99E8E}
+.marquee-track span:hover{color:#E9C77E}
+
+/* ---------- پلن‌های اشتراک (تیره) ---------- */
+.plans-container{
+  display:grid;
+  grid-template-columns:repeat(auto-fit,minmax(300px,1fr));
+  gap:1.6rem;max-width:1240px;margin:0 auto;
+}
+.plan-card{
+  position:relative;display:flex;flex-direction:column;justify-content:space-between;
+  padding:1.5rem;
+  border:1px solid rgba(255,255,255,.1);
+  border-radius:8px;
+  background:#1a2332;
+  box-shadow:0 0 0 1px rgba(255,255,255,.04),rgba(0,0,0,.35) 0 4px 14px 0;
+  transition:box-shadow 200ms,transform 200ms,border-color 200ms;
+}
+.plan-card:hover{
+  transform:translateY(-4px);
+  border-color:rgba(214,172,99,.5);
+  box-shadow:0 0 0 3px rgba(214,172,99,.1),rgba(0,0,0,.5) 0 12px 30px 0;
+}
+.plan-card h3{margin:0 0 .5rem;text-align:center;font-size:17px;font-weight:800;color:#F5EFE3}
+.plan-card ul{
+  margin:0 0 1.2rem;padding:0;list-style:none;
+  color:#C9BFAD;font-size:12.5px;line-height:2.3;
+}
+.plan-card ul strong{color:#E9C77E;font-weight:700}
+.plan-card ul li{padding:.12rem 0;border-bottom:1px dashed rgba(255,255,255,.07)}
+.plan-card ul li:last-child{border-bottom:none}
+.plan-card.featured-plan{
+  border:1.5px solid #D6AC63;
+  box-shadow:0 0 0 3px rgba(214,172,99,.12),rgba(0,0,0,.45) 0 8px 24px 0,0 0 26px rgba(214,172,99,.06);
+}
+.plan-card.featured-plan:before{
+  content:"محبوب‌ترین";position:absolute;top:-12px;right:50%;transform:translateX(50%);
+  padding:.25rem 1rem;border-radius:99px;
+  background:linear-gradient(135deg,#EAC87F,#C1903F);color:#201807;font-size:11px;font-weight:800;
+  box-shadow:0 4px 10px rgba(214,172,99,.3);white-space:nowrap;
+}
+.plan-card.recommended{border-color:rgba(66,153,225,.45)}
+.plan-card-img-wrapper{position:relative}
+.plan-card-img{transition:transform .35s}
+.plan-card:hover .plan-card-img{transform:scale(1.03)}
+.neon-badges-overlay{position:absolute;top:10px;left:10px;right:10px;display:flex;flex-wrap:wrap;gap:.35rem;pointer-events:none}
+.neon-glow-badge{
+  display:inline-flex;align-items:center;padding:.25rem .75rem;border-radius:99px;
+  font-size:11px;font-weight:700;backdrop-filter:blur(4px);
+}
+.neon-badge-pink{background:rgba(228,117,139,.14);color:#E4758B;border:1px solid rgba(228,117,139,.4)}
+.neon-badge-emerald{background:rgba(85,196,126,.13);color:#82D9A2;border:1px solid rgba(85,196,126,.4)}
+.neon-badge-cyan{background:rgba(159,180,206,.13);color:#AEC4DC;border:1px solid rgba(159,180,206,.4)}
+.fallback-plan-banner{
+  background:linear-gradient(135deg,rgba(214,172,99,.12),#171310)!important;
+  border:1px solid rgba(214,172,99,.28)!important;box-shadow:none!important;
+}
+.fallback-plan-banner span{color:#E9C77E!important}
+
+/* ---------- مودال‌های احراز هویت (تیره) ---------- */
+.modal{
+  position:fixed;inset:0;z-index:100;
+  display:none;align-items:center;justify-content:center;
+  padding:1rem;background:rgba(0,0,0,.6);
+  backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px);
+  overflow-y:auto;
+}
+.modal.show{display:flex;animation:gtModalIn .25s cubic-bezier(.2,0,0,1)}
+@keyframes gtModalIn{from{opacity:0}to{opacity:1}}
+.modal-content{
+  position:relative;width:min(100%,440px);
+  max-height:calc(100svh - 32px);overflow-y:auto;margin:auto;
+  padding:1.75rem;border-radius:8px;
+  background:#171310;
+  border:1px solid rgba(214,172,99,.22);
+  box-shadow:0 24px 60px rgba(0,0,0,.6),0 0 40px rgba(214,172,99,.05);
+  animation:gtModalCard .3s cubic-bezier(.2,0,0,1);
+  color:#e6ebf2;
+}
+@keyframes gtModalCard{from{opacity:0;transform:translateY(16px) scale(.985)}to{opacity:1;transform:none}}
+.modal-content h2{color:#F5EFE3!important}
+.close-btn{
+  position:absolute;top:12px;left:12px;z-index:2;
+  width:30px;height:30px;display:grid;place-items:center;
+  border:1px solid rgba(240,234,222,.14);border-radius:5px;
+  background:#1E1A14;color:#A99E8E;
+  font-size:.85rem;cursor:pointer;
+  transition:background 150ms,color 150ms,transform 150ms;
+}
+.close-btn:hover{background:rgba(214,57,57,.14);color:#f0645c;border-color:rgba(214,57,57,.35);transform:rotate(90deg)}
+
+/* فرم داخل مودال (تیره) */
+.modal .form-group{margin:0 0 14px}
+.modal label{display:block;margin-bottom:6px;color:#F5EFE3;font-size:12.5px;font-weight:600;text-align:right}
+.modal input[type="text"],.modal input[type="email"],.modal input[type="tel"],
+.modal input[type="password"],.modal input[type="number"]{
+  width:100%;min-height:38px;padding:8px 12px;
+  direction:rtl;text-align:right;
+  color:#F5EFE3;background:#1E1A14;
+  border:1px solid rgba(240,234,222,.11);border-radius:4px;
+  outline:0;font-family:inherit;font-size:13px;
+  transition:border-color 150ms,box-shadow 150ms;
+}
+.modal input:focus{
+  border-color:#D6AC63;
+  box-shadow:0 0 0 3px rgba(214,172,99,.16);
+}
+.modal input::placeholder{color:#7A7062}
+.modal .form-row{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+
+/* ---------- آکاردئون FAQ ---------- */
+.faq-item{transition:border-color .25s;background:#171310;border:1px solid rgba(240,234,222,.09)}
+.faq-item.open{border-color:rgba(214,172,99,.45)!important}
+.faq-toggle{background:none;border:none;cursor:pointer;font-family:inherit;width:100%}
+.faq-toggle span{color:#F5EFE3!important}
+.faq-icon{transition:transform .3s cubic-bezier(.2,0,0,1),color .3s;flex-shrink:0;color:#A99E8E}
+.faq-item.open .faq-icon{transform:rotate(180deg);color:#D6AC63}
+.faq-answer{
+  max-height:0;overflow:hidden;
+  transition:max-height .38s cubic-bezier(.2,0,0,1),opacity .3s;
+  opacity:0;
+}
+.faq-item.open .faq-answer{max-height:420px;opacity:1}
+.faq-item:not(.open) .faq-answer{padding-top:0;padding-bottom:0}
+.faq-answer{color:#C9BFAD!important;font-size:13px;line-height:2}
+.faq-answer *,.faq-item p{color:#C9BFAD!important}
+
+/* ---------- دکمه‌ها ---------- */
+button,a{font-family:inherit}
+button:active{transform:scale(.985)}
+
+/* ---------- ریسپانسیو لندینگ ---------- */
+@media (max-width:767px){
+  .plans-container{grid-template-columns:1fr;gap:1.2rem}
+  .plan-card{padding:1.2rem}
+  .modal .form-row{grid-template-columns:1fr}
+  .neon-badges-overlay{top:8px;left:8px;right:8px}
+  .marquee-track{animation-duration:26s}
+}
+@media (min-width:768px) and (max-width:1100px){
+  .plans-container{grid-template-columns:repeat(2,minmax(0,1fr))}
+}
+@media (min-width:2200px){
+  .max-w-7xl{max-width:1320px}
+}
+@media (orientation:landscape) and (max-height:700px) and (max-width:900px){
+  section:first-of-type{min-height:auto;padding-top:6rem!important;padding-bottom:3rem!important}
+  .float-animation,.float-animation-delay,.float-animation-delay2{animation:none}
+}
+@media (prefers-reduced-motion:reduce){
+  .reveal{opacity:1!important;transform:none!important;transition:none!important}
+  .marquee-track{animation:none!important}
+  .float-animation,.float-animation-delay,.float-animation-delay2{animation:none!important}
+  .pulse-glow{animation:none!important}
+  .gradient-animate{animation:none!important}
+}

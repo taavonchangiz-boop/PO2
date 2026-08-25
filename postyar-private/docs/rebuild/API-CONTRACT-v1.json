@@ -1,0 +1,50 @@
+{
+  "version": "1.0",
+  "base_path": "/api/v1",
+  "transport": "HTTPS",
+  "correlation_header": "X-Request-ID",
+  "health": [
+    "GET /health",
+    "GET /ready"
+  ],
+  "auth": "Bearer token for protected endpoints",
+  "pagination": {
+    "posts": {
+      "legacy": [
+        "limit",
+        "offset"
+      ],
+      "preferred": [
+        "before_id"
+      ]
+    }
+  },
+  "rules": [
+    "Clients must not infer authorization from UI visibility.",
+    "Clients must handle 401, 403, 409, 422 and 429 explicitly.",
+    "Idempotent write operations should send the server-supported idempotency key where documented.",
+    "X-Request-ID is diagnostic and must not be treated as an authentication credential."
+  ],
+  "advertising": {
+    "public": [
+      "GET /ads"
+    ],
+    "user": [
+      "POST /ads",
+      "GET /ads/mine",
+      "GET /ads/mine/{id}/stats",
+      "POST /ads/{id}/impression",
+      "GET /ads/{id}/click"
+    ],
+    "admin": [
+      "GET /admin/ads",
+      "POST /admin/ads/{id}/status"
+    ],
+    "rules": [
+      "Only approved campaigns inside their start/end window are public.",
+      "Destination URLs are allowlisted to http/https/tg/bale.",
+      "Impressions/clicks are de-duplicated per campaign/fingerprint/event over a rolling 24h window.",
+      "Raw IP/user-agent values are not persisted; HMAC fingerprints are used."
+    ]
+  }
+}

@@ -1,0 +1,46 @@
+-- Wave T: provider-neutral, exactly-once settlement ledger (MySQL/MariaDB)
+CREATE TABLE IF NOT EXISTS payment_orders (
+    id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    public_id VARCHAR(64) NOT NULL UNIQUE,
+    user_id INT NOT NULL,
+    order_type VARCHAR(30) NOT NULL DEFAULT 'subscription',
+    plan_id INT NULL,
+    ad_order_id BIGINT UNSIGNED NULL,
+    amount DECIMAL(12,2) NOT NULL,
+    currency VARCHAR(8) NOT NULL DEFAULT 'IRR',
+    provider VARCHAR(80) NOT NULL,
+    status VARCHAR(30) NOT NULL DEFAULT 'pending',
+    idempotency_key VARCHAR(128) NOT NULL,
+    quote_json LONGTEXT NULL,
+    provider_reference VARCHAR(190) NULL,
+    provider_payload_hash CHAR(64) NULL,
+    paid_at DATETIME NULL,
+    expires_at DATETIME NULL,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE KEY uq_payment_orders_user_idem(user_id,idempotency_key),
+    UNIQUE KEY uq_payment_orders_provider_reference(provider,provider_reference),
+    INDEX idx_payment_orders_user_status(user_id,status,id),
+    INDEX idx_payment_orders_provider_status(provider,status,id),
+    INDEX idx_payment_orders_expiry(status,expires_at),
+    CONSTRAINT fk_payment_orders_user FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE,
+    CONSTRAINT fk_payment_orders_plan FOREIGN KEY(plan_id) REFERENCES plans(id) ON DELETE SET NULL,
+    CONSTRAINT fk_payment_orders_ad FOREIGN KEY(ad_order_id) REFERENCES ad_orders(id) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS payment_events (
+    id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    payment_order_id BIGINT UNSIGNED NOT NULL,
+    provider VARCHAR(80) NOT NULL,
+    event_type VARCHAR(50) NOT NULL,
+    event_key VARCHAR(190) NOT NULL,
+    provider_reference VARCHAR(190) NULL,
+    amount DECIMAL(12,2) NULL,
+    payload_hash CHAR(64) NULL,
+    outcome VARCHAR(30) NOT NULL,
+    error_code VARCHAR(100) NULL,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE KEY uq_payment_events_provider_key(provider,event_key),
+    INDEX idx_payment_events_order(payment_order_id,id),
+    CONSTRAINT fk_payment_events_order FOREIGN KEY(payment_order_id) REFERENCES payment_orders(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;

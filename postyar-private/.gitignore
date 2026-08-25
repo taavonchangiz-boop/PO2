@@ -1,0 +1,10 @@
+/config/config.php
+/storage/db/*.sqlite
+/storage/logs/*
+/public/error_log
+/public/assets/receipts/*
+/public/assets/uploads/*
+!/public/assets/receipts/.gitkeep
+!/public/assets/uploads/.gitkeep
+
+/storage/cron.lock

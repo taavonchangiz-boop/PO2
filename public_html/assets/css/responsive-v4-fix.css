@@ -1,0 +1,6 @@
+/* v4 runtime selector correction + hardening */
+#navbar .glass-light>div:nth-child(2){display:flex;align-items:center;justify-content:center;gap:clamp(12px,1.5vw,28px);min-width:0;flex:1}
+#navbar .glass-light>div:nth-child(2)>a{display:inline-flex;align-items:center;justify-content:center;min-height:40px;white-space:nowrap}
+#navbar .glass-light>div:nth-child(3){display:flex;align-items:center;gap:8px;flex:0 0 auto}
+@media(max-width:1023px){#navbar .glass-light>div:nth-child(2){display:none!important}#navbar .glass-light>div:nth-child(3){display:flex!important}#navbar #mobileToggle{display:grid!important;place-items:center!important;min-width:44px!important;min-height:44px!important;order:-1!important}#mobileMenu{display:none!important}#mobileMenu.is-open{display:flex!important}}
+@media(min-width:1024px){#navbar .glass-light>div:nth-child(2){display:flex!important}#navbar .glass-light>div:nth-child(3){display:flex!important}#navbar #mobileToggle,#mobileMenu{display:none!important}}

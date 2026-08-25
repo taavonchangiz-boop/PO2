@@ -1,0 +1,16 @@
+# postyar-private must never be web-exposed.
+# The worker.php entry point is CLI-only and is explicitly denied as a defense-in-depth rule.
+<FilesMatch "^(worker\.php|cron\.php|config\.php|composer\.(json|lock))$">
+    <IfModule mod_authz_core.c>
+        Require all denied
+    </IfModule>
+    <IfModule !mod_authz_core.c>
+        Deny from all
+    </IfModule>
+</FilesMatch>
+<IfModule mod_authz_core.c>
+    Require all denied
+</IfModule>
+<IfModule !mod_authz_core.c>
+    Deny from all
+</IfModule>

@@ -1,0 +1,4 @@
+-- Wave N: canonical entitlement / anti-abuse identity integrity.
+-- Existing installs MUST execute the versioned PHP migration in Bootstrap.php.
+-- It canonicalizes historical channel_registry and anti_abuse_claims rows and fails closed on owner collisions.
+-- This SQL file intentionally contains no destructive auto-merge statements.

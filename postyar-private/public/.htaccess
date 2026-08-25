@@ -1,0 +1,26 @@
+<IfModule mod_rewrite.c>
+    RewriteEngine On
+    RewriteCond %{REQUEST_FILENAME} !-f
+    RewriteCond %{REQUEST_FILENAME} !-d
+    RewriteRule ^(.*)$ index.php [QSA,L]
+</IfModule>
+
+<FilesMatch "^\\.">
+    <IfModule !mod_authz_core>
+        Order allow,deny
+        Deny from all
+    </IfModule>
+    <IfModule mod_authz_core>
+        Require all denied
+    </IfModule>
+</FilesMatch>
+
+<FilesMatch "(config|cron|debug|error_log|composer\\.(json|lock)|package\\.json|\\.env)">
+    <IfModule !mod_authz_core>
+        Order allow,deny
+        Deny from all
+    </IfModule>
+    <IfModule mod_authz_core>
+        Require all denied
+    </IfModule>
+</FilesMatch>

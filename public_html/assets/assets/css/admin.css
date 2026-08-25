@@ -1,0 +1,152 @@
+/* ============================================================
+   پُست‌یار × Gentelella v4 — پنل مدیریت ارشد
+   لایه اختصاصی ادمین (تراکم بالاتر)؛ سیستم پایه در gentelella.css
+   ============================================================ */
+
+body{
+  background:var(--body-bg,#f5f7fb);
+  color:var(--text,#1e2633);
+  overflow-x:hidden;
+  font-size:13.5px;
+}
+.wrapper{
+  width:auto;min-width:0;max-width:none;
+  display:flex;flex-direction:column;
+}
+
+/* نشان‌های هدر ادمین */
+.admin-badge{
+  display:inline-flex;align-items:center;gap:.4rem;
+  padding:5px 12px;border-radius:99px;
+  background:var(--bg-surface);
+  border:1px solid var(--border-color);
+  color:var(--text-secondary);font-size:12px;font-weight:600;
+  box-shadow:var(--shadow);
+  white-space:nowrap;text-decoration:none;
+}
+.admin-badge:hover{border-color:rgba(26,187,156,.4);color:var(--primary-dk);text-decoration:none}
+.hamburger-btn{
+  display:grid;place-items:center;
+  width:34px;height:34px;border-radius:var(--radius-sm);
+  border:1px solid var(--border-color);
+  background:var(--bg-surface);color:var(--text-secondary);
+  font-size:1rem;cursor:pointer;
+  transition:background 120ms,color 120ms;
+}
+.hamburger-btn:hover{background:var(--bg-surface-secondary);color:var(--text)}
+
+/* آمار KPI ادمین */
+.grid,.grid-stats,.stats-grid,.dashboard-grid{
+  display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;
+}
+.stat-card,.metric-card,.card-stat{min-height:96px}
+.stat-value,.metric-value,.kpi-value{
+  font-size:20px;font-weight:800;color:var(--text);
+  font-variant-numeric:tabular-nums;letter-spacing:-.3px;
+}
+
+/* مودال‌های استایل اینلاین (userProfileModal, giftModal, adminTicketModal, ad-admin-preview-modal) */
+[style*="position:fixed"][style*="z-index"]{backdrop-filter:blur(3px)}
+
+/* اجزای تبلیغات ادمین */
+.ad-admin-card{margin-top:0}
+.ad-admin-preview-btn{
+  min-height:30px;padding:4px 11px;border-radius:var(--radius-sm);
+  border:1px solid rgba(26,187,156,.3);
+  background:var(--primary-lt);color:var(--primary-dk);
+  font-family:inherit;font-size:12px;font-weight:600;cursor:pointer;
+}
+.ad-admin-preview-btn:hover{background:rgba(26,187,156,.14)}
+.ad-admin-stat{display:flex;flex-direction:column;gap:.15rem}
+.ad-admin-stat-link{color:#0b5ed7;text-decoration:none;border-bottom:1px dashed rgba(66,153,225,.4)}
+.ad-admin-stat-link:hover{color:#066fd1}
+.ad-archive-card{border-style:dashed!important}
+.ad-manual-create{border-color:rgba(214,172,99,.2)!important;background:var(--bg-surface)!important}
+.ad-manual-form,.ad-status-form,.ad-delete-form{display:grid;gap:.55rem;align-content:start}
+.ad-manual-form-modern{display:grid;grid-template-columns:1fr 1fr;gap:1rem;align-items:end}
+.ad-manual-form-modern .ad-form-full{grid-column:1/-1}
+.ad-form-row-2col{display:contents}
+.ad-form-field{display:flex;flex-direction:column;gap:6px}
+.ad-form-field label{font-size:12px;font-weight:700;color:#DCD3C4;letter-spacing:.02em}
+.ad-form-field input[type="text"],.ad-form-field input[type="url"],.ad-form-field input:not([type]),.ad-form-field input[readonly]{width:100%;padding:10px 14px;border-radius:10px;border:1px solid #2B241B;background:#1E1A14;color:#F5EFE3;font-family:inherit;font-size:13px;outline:0;transition:border-color 150ms,box-shadow 150ms;box-sizing:border-box}
+.ad-form-field input:focus{border-color:#D6AC63;box-shadow:0 0 0 3px rgba(214,172,99,.16)}
+.ad-form-field input::placeholder{color:#7A7062}
+.ad-form-field input[type="file"]{width:100%;padding:10px 14px;border:2px dashed #2B241B;border-radius:10px;background:#1E1A14;color:#A99E8E;font-family:inherit;font-size:12px;cursor:pointer;transition:border-color 150ms,background 150ms}
+.ad-form-field input[type="file"]:hover{border-color:#D6AC63;background:#1A1610}
+.ad-form-field input[type="file"]::file-selector-button{padding:6px 14px;border-radius:8px;border:1px solid rgba(214,172,99,.3);background:rgba(214,172,99,.1);color:#E9C77E;font-family:inherit;font-size:12px;font-weight:600;cursor:pointer;transition:background 150ms;margin-left:12px}
+.ad-form-field input[type="file"]::file-selector-button:hover{background:rgba(214,172,99,.2)}
+@media (max-width:992px){.ad-manual-form-modern{grid-template-columns:1fr;gap:.85rem}}
+.ad-date-range{
+  display:flex;gap:.6rem;align-items:center;flex-wrap:wrap;
+  padding:.65rem .85rem;border-radius:var(--radius-sm);
+  border:1px dashed var(--border-color);background:var(--bg-surface-secondary);
+}
+.sms-provider-card{
+  border:1px solid var(--border-color)!important;border-radius:var(--radius)!important;
+  background:var(--bg-surface)!important;padding:1rem!important;
+  transition:border-color 150ms;
+}
+.sms-provider-card:hover{border-color:rgba(26,187,156,.4)!important}
+.payment-provider-card{
+  border:1px solid var(--border-color)!important;border-radius:var(--radius)!important;
+  background:var(--bg-surface)!important;padding:1rem!important;
+}
+.ad-time-panel-fields{display:grid;grid-template-columns:repeat(2,1fr);gap:.7rem}
+.ad-time-panel-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:.7rem}
+.ad-time-panel-hint{color:var(--text-muted);font-size:11px}
+.ad-popup-hour,.ad-popup-minute{direction:ltr;text-align:center}
+.ad-jalali-input{cursor:pointer!important;background:var(--bg-surface-secondary)!important}
+.ad-time-display{
+  min-width:68px;padding:0 10px;min-height:34px;
+  border:1px solid var(--border-color)!important;border-radius:var(--radius-sm);
+  background:var(--bg-surface);color:var(--primary-dk);
+  font-family:inherit;font-weight:700;font-size:12px;cursor:pointer;
+  font-variant-numeric:tabular-nums;
+}
+.ad-time-display:hover{border-color:var(--primary)!important}
+.ad-date-fields{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+.ad-date-field label{font-size:11.5px}
+.ad-date-control{display:flex;gap:.5rem}
+.ad-image-help{
+  margin:.3rem 0 .45rem;padding:.4rem .6rem;border-radius:5px;
+  background:var(--azure-lt);color:#0b5ed7;font-size:10.5px;line-height:1.7;
+  border:1px dashed rgba(66,153,225,.25);
+}
+.ad-creative-card{
+  border:1px solid var(--border-color);border-radius:var(--radius);
+  padding:12px;background:var(--bg-surface);
+}
+.ad-creative-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px}
+.ad-creative-head h4{font-size:12.5px}
+.ad-creative-head span{color:var(--text-muted);font-size:10.5px}
+
+/* پوسته‌سازی عناصر اینلاین */
+#admin-bell-popup{
+  background:#171310!important;
+  border:1px solid #2B241B!important;
+  border-radius:10px!important;
+  box-shadow:0 8px 24px rgba(0,0,0,.4),0 0 0 1px rgba(214,172,99,.08)!important;
+}
+#admin-bell-popup strong{color:#F5EFE3!important}
+.close-btn{background:var(--bg-surface)!important}
+
+.ad-manual-placement-fixed{display:none!important}
+
+/* ریسپانسیو ادمین */
+@media (min-width:1920px){
+  .page-wrapper{max-width:1780px}
+}
+@media (max-width:1180px){
+  .grid,.grid-stats,.stats-grid,.dashboard-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
+}
+@media (max-width:992px){
+  body{padding-bottom:0}
+  .grid,.grid-stats,.stats-grid,.dashboard-grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+  .form-row,.form-grid{grid-template-columns:1fr;gap:11px}
+  .ad-date-fields{grid-template-columns:1fr}
+}
+@media (max-width:640px){
+  .grid,.grid-stats,.stats-grid,.dashboard-grid{grid-template-columns:1fr}
+  table{min-width:600px}
+}
+

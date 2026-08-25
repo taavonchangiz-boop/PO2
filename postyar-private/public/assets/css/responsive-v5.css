@@ -1,0 +1,35 @@
+/* Postyar responsive baseline: single authoritative mobile layer. */
+:root{--touch-min:44px;--nav-h:64px;--safe-bottom:env(safe-area-inset-bottom,0px);--focus:#A5B4FC}
+*,*::before,*::after{box-sizing:border-box}
+button,input,select,textarea{font:inherit}
+button,a,input,select,textarea{touch-action:manipulation}
+:focus-visible{outline:3px solid var(--focus);outline-offset:3px}
+img,svg,video{max-width:100%;height:auto}
+.mobile-nav-item,.menu-item,.tb-btn,button,.btn,a.btn{min-height:var(--touch-min)}
+.mobile-nav-item{min-width:44px;justify-content:center}
+@media (max-width:767px){
+ html{font-size:16px;-webkit-text-size-adjust:100%}
+ body{padding-bottom:calc(var(--nav-h) + var(--safe-bottom));overflow-x:hidden}
+ .mobile-nav{height:calc(var(--nav-h) + var(--safe-bottom));padding-bottom:var(--safe-bottom)}
+ .mobile-nav-item{font-size:12px;line-height:1.2;gap:3px}
+ .mobile-nav-item>span:first-child{font-size:20px;line-height:1}
+ .topbar{min-height:56px;padding-inline:12px}
+ .topbar .breadcrumb{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+ .tb-plan{max-width:42vw;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+ #user-bell-popup{position:fixed!important;left:12px!important;right:12px!important;top:64px!important;width:auto!important;max-height:calc(100dvh - 88px)!important;z-index:1000!important}
+ .g-sidebar{max-width:min(88vw,360px)}
+ .data-table,.admin-table,.users-table,.payments-table,.tickets-table,.ads-table{display:block;width:100%;overflow-x:auto;-webkit-overflow-scrolling:touch}
+ table{min-width:640px}
+ .toolbar,.filters,.action-row{display:flex;flex-wrap:wrap;gap:8px}
+ .toolbar>*,.filters>*{min-width:min(100%,180px);flex:1 1 180px}
+ input,select,textarea{min-height:46px;font-size:16px}
+ .modal,.modal-content,.dialog{max-height:calc(100dvh - 24px);overflow:auto}
+}
+@media (min-width:768px) and (max-width:1024px){
+ .g-sidebar{width:220px}
+ .wrapper,.g-main{min-width:0}
+ .mobile-nav{display:none}
+ .toolbar,.filters{flex-wrap:wrap}
+}
+@media (prefers-reduced-motion:reduce){*,*::before,*::after{animation-duration:.01ms!important;animation-iteration-count:1!important;transition-duration:.01ms!important;scroll-behavior:auto!important}}
+@media (forced-colors:active){:focus-visible{outline:3px solid CanvasText}}

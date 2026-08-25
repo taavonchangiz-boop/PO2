@@ -5,7 +5,6 @@
  * @package WHCM_SaaS
  */
 
-// لایه حفاظتی اول — شکار خطاهای کامپایل و اجرا قبل از بوت‌استرپ
 try {
     require_once __DIR__ . '/../app/Core/Bootstrap.php';
 } catch (\Throwable $e) {
@@ -19,61 +18,33 @@ use WHCM\Core\Bootstrap;
 use WHCM\Core\Router;
 
 try {
-    // راه‌اندازی و بوت‌استرپ سامانه (قبل از هر چیز — API و سایت هر دو نیاز دارند)
     Bootstrap::run();
 
-    // ═══════════════════════════════════════════════════════════════════
-    // لایه API موبایل — فقط برای درخواست‌های /api/v1/
-    // این بخش کاملاً مستقل از سایت است و هیچ تاثیری روی آن ندارد
-    // ═══════════════════════════════════════════════════════════════════
     $requestUri = parse_url($_SERVER['REQUEST_URI'] ?? '/', PHP_URL_PATH);
     if (strpos($requestUri, '/api/v1/') === 0) {
         require_once __DIR__ . '/../app/Api/MobileApiResponse.php';
         require_once __DIR__ . '/../app/Api/MobileApiAuth.php';
         require_once __DIR__ . '/../app/Api/MobileApiRouter.php';
         require_once __DIR__ . '/../app/Api/MobileApiController.php';
-
-        // بارگذاری تمام کنترلرهای API
         $apiControllerFiles = glob(__DIR__ . '/../app/Api/Controllers/*.php');
-        foreach ($apiControllerFiles as $apiCtrlFile) {
-            require_once $apiCtrlFile;
-        }
-
-        // ثبت مسیرهای API
+        foreach ($apiControllerFiles as $apiCtrlFile) require_once $apiCtrlFile;
         require_once __DIR__ . '/../app/Api/Routes/api.php';
-
-        // اجرای API و خروج (بدون ورود به Router سایت)
-        \WHCM\Api\MobileApiRouter::dispatch(
-            $_SERVER['REQUEST_METHOD'],
-            $requestUri
-        );
+        \WHCM\Api\MobileApiRouter::dispatch($_SERVER['REQUEST_METHOD'], $requestUri);
         exit;
     }
 
-    // ═══════════════════════════════════════════════════════════════════
-    // ادامه وب‌سایت فعلی (بدون هیچ تغییر)
-    // ═══════════════════════════════════════════════════════════════════
+    if (extension_loaded('zlib') && !ini_get('zlib.output_compression')) ob_start('ob_gzhandler');
 
-    // فشرده‌سازی خروجی — بهبود سرعت بارگذاری صفحات
-    if (extension_loaded('zlib') && !ini_get('zlib.output_compression')) {
-        ob_start('ob_gzhandler');
-    }
-
-    // قدم ۱ — بارگذاری اسکلت ماژولار (بدون تغییر رفتار — ایمن حتی اگر فایل روی هاست نباشد)
     $__moduleLoader = __DIR__ . '/../app/Modules/ModuleLoader.php';
     if (file_exists($__moduleLoader)) {
         require_once $__moduleLoader;
-        if (class_exists('\\WHCM\\Modules\\ModuleLoader')) {
-            \WHCM\Modules\ModuleLoader::load();
-        }
+        if (class_exists('\\WHCM\\Modules\\ModuleLoader')) \WHCM\Modules\ModuleLoader::load();
     }
 
-    // Operational endpoints — intentionally minimal and non-sensitive.
     Router::get('/healthz', 'HealthController@live');
     Router::get('/readyz', 'HealthController@ready');
     Router::get('/metrics', 'HealthController@metrics');
 
-    // ثبت مسیرهای کاربری (مستاجرین) و لایه عمومی سامانه
     Router::get('/', 'MainController@index');
     Router::post('/login', 'MainController@handleLogin');
     Router::post('/phone-login', 'MainController@handlePhoneLoginRequest');
@@ -81,7 +52,6 @@ try {
     Router::post('/phone-login-verify', 'MainController@handlePhoneLoginVerify');
     Router::post('/register', 'MainController@handleRegister');
     Router::post('/logout', 'MainController@logout');
-
     Router::get('/dashboard', 'MainController@dashboard');
     Router::post('/dashboard/add-post', 'MainController@handleCreatePost');
     Router::post('/dashboard/cancel-post', 'MainController@handleCancelPost');
@@ -97,15 +67,14 @@ try {
     Router::post('/dashboard/add-auto-reply', 'MainController@handleAddAutoReply');
     Router::post('/dashboard/delete-auto-reply', 'MainController@handleDeleteAutoReply');
     Router::post('/dashboard/toggle-responder', 'MainController@handleToggleResponder');
-Router::post('/dashboard/mark-announcement-read', 'MainController@handleMarkAnnouncementRead');
-Router::post('/dashboard/mark-notification-read', 'MainController@handleMarkNotificationRead');
-Router::post('/dashboard/mark-all-notifications-read', 'MainController@handleMarkAllNotificationsRead');
+    Router::post('/dashboard/mark-announcement-read', 'MainController@handleMarkAnnouncementRead');
+    Router::post('/dashboard/mark-notification-read', 'MainController@handleMarkNotificationRead');
+    Router::post('/dashboard/mark-all-notifications-read', 'MainController@handleMarkAllNotificationsRead');
     Router::post('/dashboard/add-ticket', 'MainController@handleCreateTicket');
     Router::post('/reset-password', 'MainController@handleResetPassword');
     Router::get('/reset-password', 'MainController@showResetPasswordForm');
     Router::post('/reset-password/confirm', 'MainController@handleResetPasswordConfirm');
 
-    // ثبت مسیرهای مدیریت کل پلتفرم (سوپر ادمین)
     Router::get('/hnnh', 'MainController@admin');
     Router::post('/hnnh/reply-ticket', 'MainController@handleReplyTicket');
     Router::post('/hnnh/delete-plan', 'MainController@handleDeletePlan');
@@ -121,17 +90,13 @@ Router::post('/dashboard/mark-all-notifications-read', 'MainController@handleMar
     Router::post('/hnnh/add-user-manual', 'MainController@handleAddUserManual');
     Router::post('/hnnh/grant-subscription-manual', 'MainController@handleGrantSubscriptionManual');
 
-    // ثبت مسیرهای سیستم زیرمجموعه‌گیری و کیف پول
     Router::get('/dashboard/referral', 'MainController@referralSection');
     Router::get('/dashboard/wallet', 'MainController@walletSection');
     Router::post('/dashboard/convert-points', 'MainController@handleConvertPoints');
-
-    // ثبت مسیرهای ادمین — سیستم زیرمجموعه‌گیری
     Router::get('/hnnh/referral-settings', 'MainController@adminReferralSettings');
     Router::post('/hnnh/save-referral-settings', 'MainController@handleSaveReferralSettings');
     Router::get('/hnnh/wallet-stats', 'MainController@adminWalletStats');
 
-    // ثبت مسیرهای ادمین — سیستم پیامک (SMS.ir)
     Router::get('/hnnh/sms-settings', 'MainController@adminSmsSettings');
     Router::get('/hnnh/provider-settings', 'MainController@adminProviderSettings');
     Router::post('/hnnh/save-provider-settings', 'MainController@handleSaveProviderSettings');
@@ -141,8 +106,6 @@ Router::post('/dashboard/mark-all-notifications-read', 'MainController@handleMar
     Router::post('/hnnh/delete-sms-template', 'MainController@handleDeleteSmsTemplate');
     Router::post('/hnnh/test-sms', 'MainController@handleTestSms');
     Router::post('/hnnh/send-bulk-sms', 'MainController@handleSendBulkSms');
-
-    // ثبت مسیرهای ادمین — سیستم ایمیل (قالب‌ها و SMTP)
     Router::get('/hnnh/email-settings', 'MainController@adminEmailSettings');
     Router::post('/hnnh/save-email-config', 'MainController@handleSaveEmailConfig');
     Router::post('/hnnh/save-email-template', 'MainController@handleSaveEmailTemplate');
@@ -151,13 +114,11 @@ Router::post('/dashboard/mark-all-notifications-read', 'MainController@handleMar
     Router::post('/hnnh/send-bulk-email', 'MainController@handleSendBulkEmail');
     Router::post('/hnnh/preview-email-template', 'MainController@handlePreviewEmailTemplate');
 
-    // ثبت مسیرهای ردیابی لینک و وب‌هوک
     Router::get('/go/{code}', 'MainController@handleLinkRedirect');
     Router::get('/dashboard/link-stats', 'MainController@linkStatsSection');
     Router::get('/help', 'MainController@helpPage');
     Router::get('/privacy', 'MainController@privacyPage');
 
-    // Wave R — سیستم تبلیغات عمومی و ردیابی امن
     Router::post('/ads/impression', 'MainController@recordAdImpression');
     Router::get('/ads/click/{id}', 'MainController@handleAdClick');
     Router::post('/dashboard/ads/create', 'MainController@handleCreateAd');
@@ -175,7 +136,6 @@ Router::post('/dashboard/mark-all-notifications-read', 'MainController@handleMar
     Router::get('/click', 'MainController@handleClick');
     Router::post('/api/webhook', 'MainController@handleApiWebhook');
 
-    // مسیرهای تنظیمات ادمین که قبلاً ثبت نشده بودند
     Router::post('/hnnh/save-gold-settings-admin', 'MainController@handleSaveGoldSettingsAdmin');
     Router::post('/hnnh/save-ai-settings-admin', 'MainController@handleSaveAiSettingsAdmin');
     Router::post('/hnnh/delete-discount', 'MainController@handleDeleteDiscount');
@@ -187,24 +147,17 @@ Router::post('/dashboard/mark-all-notifications-read', 'MainController@handleMar
     Router::post('/hnnh/close-ticket', 'MainController@handleCloseTicketAdmin');
     Router::post('/hnnh/create-ticket', 'MainController@handleCreateTicketAdmin');
 
-    // مسیرهای GET برای عملیات ادمین (لینک‌های اکشن سریع)
-
-    // مسیرهای پوش ناتیفیکیشن
     Router::get('/api/push/vapid-key', 'MainController@getVapidPublicKey');
     Router::post('/api/push/subscribe', 'MainController@handlePushSubscribe');
     Router::post('/api/push/unsubscribe', 'MainController@handlePushUnsubscribe');
     Router::get('/api/push/status', 'MainController@getPushStatus');
-
-    // پردازش صف پست‌ها (AJAX — فراخوانی از داشبورد)
     Router::post('/api/process-post-queue', 'MainController@processPostQueue');
-
-    // قلب تپنده — Polling پیام‌ها + پست‌های زمان‌بندی (فراخوانی دوره‌ای از داشبورد)
     Router::post('/api/heartbeat', 'MainController@handleHeartbeat');
-
-    // مدیریت دسته‌بندی تیکت‌ها (AJAX)
     Router::post('/hnnh/save-ticket-categories', 'MainController@handleSaveTicketCategories');
 
-    // پردازش درخواست جاری
+    // Single web security boundary: CSRF, channel edit verification/encryption, secret handling and headers.
+    \WHCM\Core\RequestGuard::enforce();
+
     Router::dispatch();
 
 } catch (\Throwable $e) {

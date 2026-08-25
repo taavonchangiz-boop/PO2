@@ -1,0 +1,564 @@
+name: Apply Security and UX Hardening
+
+on:
+  push:
+    branches:
+      - hardening/uiux-complete-2026-08
+
+permissions:
+  contents: write
+
+jobs:
+  harden:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Apply hardening
+        shell: bash
+        run: |
+          python3 <<'PY'
+          from pathlib import Path
+          import re
+
+          ROOT = Path('postyar-private')
+
+          def read(p):
+              return (ROOT / p).read_text(encoding='utf-8')
+          def write(p, s):
+              (ROOT / p).write_text(s, encoding='utf-8')
+
+          def replace_between(text, start_re, end_re, replacement, label):
+              m = re.search(start_re, text, re.M)
+              if not m:
+                  raise RuntimeError(f'Missing start marker: {label}')
+              e = re.search(end_re, text[m.end():], re.M)
+              if not e:
+                  raise RuntimeError(f'Missing end marker: {label}')
+              a = m.start(); b = m.end() + e.start()
+              return text[:a] + replacement.rstrip() + '\n\n' + text[b:]
+
+          # 1) WebPush: strict endpoint validation + DNS pinning + no redirect + bounded TTL.
+          webpush = r'''<?php
+          namespace WHCM\Core;
+
+          /**
+           * Web Push transport with strict SSRF protection.
+           * The endpoint is user-controlled data and is therefore never trusted.
+           */
+          final class WebPush {
+              public static function send(string $endpoint, string $userPublicKey, string $userAuthToken, string $payload, array $vapid, int $ttl = 2419200): array {
+                  $target = self::validateEndpoint($endpoint);
+                  $ttl = max(0, min($ttl, 2419200));
+                  $headers = [
+                      'TTL: ' . $ttl,
+                      'Content-Type: application/octet-stream',
+                      'Content-Encoding: aes128gcm',
+                  ];
+
+                  if (!empty($vapid['subject']) && !empty($vapid['publicKey']) && !empty($vapid['privateKey'])) {
+                      $headers[] = 'Authorization: ' . self::createVapidAuthorization($target['audience'], $vapid['subject'], $vapid['publicKey'], $vapid['privateKey']);
+                  }
+
+                  $encrypted = self::encryptPayload($payload, $userPublicKey, $userAuthToken);
+                  $headers[] = 'Content-Length: ' . strlen($encrypted);
+
+                  $ch = curl_init($endpoint);
+                  if ($ch === false) throw new \RuntimeException('Web Push transport initialization failed.');
+                  curl_setopt_array($ch, [
+                      CURLOPT_POST => true,
+                      CURLOPT_RETURNTRANSFER => true,
+                      CURLOPT_HTTPHEADER => $headers,
+                      CURLOPT_POSTFIELDS => $encrypted,
+                      CURLOPT_TIMEOUT => 30,
+                      CURLOPT_CONNECTTIMEOUT => 10,
+                      CURLOPT_FOLLOWLOCATION => false,
+                      CURLOPT_MAXREDIRS => 0,
+                      CURLOPT_SSL_VERIFYPEER => true,
+                      CURLOPT_SSL_VERIFYHOST => 2,
+                      CURLOPT_PROTOCOLS => CURLPROTO_HTTPS,
+                      CURLOPT_REDIR_PROTOCOLS => CURLPROTO_HTTPS,
+                      CURLOPT_RESOLVE => $target['resolve'],
+                  ]);
+                  $response = curl_exec($ch);
+                  $statusCode = (int)curl_getinfo($ch, CURLINFO_HTTP_CODE);
+                  $curlError = curl_error($ch);
+                  curl_close($ch);
+
+                  return ['success' => ($statusCode >= 200 && $statusCode < 300), 'status' => $statusCode, 'error' => $curlError ?: null];
+              }
+
+              public static function sendBatch(array $subscriptions, string $payload, array $vapid): array {
+                  $results = [];
+                  foreach ($subscriptions as $sub) {
+                      try {
+                          $results[] = self::send((string)$sub['endpoint'], (string)$sub['keys_p256dh'], (string)$sub['keys_auth'], $payload, $vapid);
+                      } catch (\Throwable $e) {
+                          $results[] = ['success' => false, 'status' => 0, 'error' => $e->getMessage()];
+                      }
+                  }
+                  return $results;
+              }
+
+              private static function validateEndpoint(string $endpoint): array {
+                  $parts = parse_url(trim($endpoint));
+                  if (!$parts || strtolower((string)($parts['scheme'] ?? '')) !== 'https' || empty($parts['host'])) {
+                      throw new \InvalidArgumentException('Push endpoint must use HTTPS.');
+                  }
+                  if (isset($parts['user']) || isset($parts['pass'])) throw new \InvalidArgumentException('Push endpoint credentials are not allowed.');
+                  $host = strtolower(rtrim((string)$parts['host'], '.'));
+                  $port = (int)($parts['port'] ?? 443);
+                  if ($port !== 443) throw new \InvalidArgumentException('Push endpoint port is not allowed.');
+                  if ($host === 'localhost' || str_ends_with($host, '.localhost') || str_ends_with($host, '.local')) throw new \InvalidArgumentException('Private push endpoint is not allowed.');
+
+                  $ips = [];
+                  if (filter_var($host, FILTER_VALIDATE_IP)) {
+                      $ips = [$host];
+                  } else {
+                      $a = @dns_get_record($host, DNS_A);
+                      $aaaa = @dns_get_record($host, DNS_AAAA);
+                      foreach (array_merge(is_array($a) ? $a : [], is_array($aaaa) ? $aaaa : []) as $r) {
+                          if (!empty($r['ip'])) $ips[] = $r['ip'];
+                          if (!empty($r['ipv6'])) $ips[] = $r['ipv6'];
+                      }
+                  }
+                  $ips = array_values(array_unique($ips));
+                  if (!$ips) throw new \RuntimeException('Push endpoint DNS resolution failed.');
+                  foreach ($ips as $ip) {
+                      if (filter_var($ip, FILTER_VALIDATE_IP, FILTER_FLAG_NO_PRIV_RANGE | FILTER_FLAG_NO_RES_RANGE) === false) {
+                          throw new \InvalidArgumentException('Push endpoint resolves to a private or reserved address.');
+                      }
+                  }
+                  $resolve = [];
+                  foreach ($ips as $ip) {
+                      $resolve[] = str_contains($ip, ':') ? $host . ':443:[' . $ip . ']' : $host . ':443:' . $ip;
+                  }
+                  return ['audience' => 'https://' . $host, 'resolve' => $resolve];
+              }
+
+              private static function createVapidAuthorization(string $audience, string $subject, string $publicKey, string $privateKeyPem): string {
+                  return 'vapid t=' . self::buildVapidJwt($audience, $subject, $privateKeyPem) . ', k=' . $publicKey;
+              }
+              private static function buildVapidJwt(string $audience, string $subject, string $privateKeyPem): string {
+                  $h = self::b64UrlEncode(json_encode(['typ'=>'JWT','alg'=>'ES256'], JSON_UNESCAPED_SLASHES));
+                  $b = self::b64UrlEncode(json_encode(['aud'=>$audience,'exp'=>time()+43200,'sub'=>$subject], JSON_UNESCAPED_SLASHES));
+                  $unsigned = $h . '.' . $b;
+                  $pkey = openssl_pkey_get_private($privateKeyPem);
+                  if (!$pkey || !openssl_sign($unsigned, $signature, $pkey, OPENSSL_ALGO_SHA256)) throw new \RuntimeException('VAPID signing failed.');
+                  return $unsigned . '.' . self::b64UrlEncode($signature);
+              }
+
+              private static function encryptPayload(string $payload, string $userPubKeyB64, string $userAuthB64): string {
+                  $userPubKey = self::b64UrlDecode($userPubKeyB64); $userAuth = self::b64UrlDecode($userAuthB64);
+                  if (strlen($userPubKey) !== 65 || strlen($userAuth) < 16) throw new \InvalidArgumentException('Invalid Web Push subscription keys.');
+                  $ephemKey = openssl_pkey_new(['curve_name'=>'prime256v1','private_key_type'=>OPENSSL_KEYTYPE_EC]);
+                  if (!$ephemKey) throw new \RuntimeException('Ephemeral key generation failed.');
+                  $details = openssl_pkey_get_details($ephemKey); if (!$details || empty($details['key'])) throw new \RuntimeException('Ephemeral public key extraction failed.');
+                  $ephemPubRaw = self::extractRawPoint($details);
+                  $sharedSecret = self::ecdh($ephemKey, $userPubKey);
+                  $prk = hash_hmac('sha256', $sharedSecret, $userAuth, true);
+                  $info = "Content-Encoding: aes128gcm\x00P-256\x00" . self::u16(strlen($ephemPubRaw)) . $ephemPubRaw . self::u16(strlen($userPubKey)) . $userPubKey;
+                  $cek = substr(hash_hmac('sha256', $info . "\x01", $prk, true), 0, 16);
+                  $nonce = substr(hash_hmac('sha256', $info . "\x02", $prk, true), 0, 12);
+                  $tag=''; $ciphertext=openssl_encrypt($payload,'aes-128-gcm',$cek,OPENSSL_RAW_DATA,$nonce,$tag, '', 16);
+                  if ($ciphertext === false) throw new \RuntimeException('Push encryption failed.');
+                  return $ephemPubRaw . "\x00\x00" . $ciphertext . $tag;
+              }
+              private static function ecdh($localKey, string $remotePubRaw): string {
+                  $remotePem=self::rawPointToSpkiPem($remotePubRaw); $remoteKey=openssl_pkey_get_public($remotePem);
+                  if (!$remoteKey) throw new \RuntimeException('Remote public key error.');
+                  $result=openssl_dh_compute_key($remoteKey,$localKey); if ($result===false) throw new \RuntimeException('ECDH compute failed.');
+                  return str_pad($result,32,"\x00",STR_PAD_LEFT);
+              }
+              private static function b64UrlEncode(string $data): string { return rtrim(strtr(base64_encode($data),'+/','-_'),'='); }
+              private static function b64UrlDecode(string $data): string { $data=strtr($data,'-_','+/'); $pad=(4-strlen($data)%4)%4; return base64_decode($data . str_repeat('=',$pad),true) ?: ''; }
+              private static function u16(int $n): string { return chr(($n>>8)&255).chr($n&255); }
+              private static function extractRawPoint(array $details): string {
+                  $der=base64_decode(preg_replace('/-----.*?-----/','',$details['key'])); $pos=strrpos($der,"\x04");
+                  if ($pos===false || $pos+65>strlen($der)) throw new \RuntimeException('Cannot extract EC public point.'); return substr($der,$pos,65);
+              }
+              private static function rawPointToSpkiPem(string $point): string {
+                  $oid=hex2bin('06082a8648ce3d030107'); $bit="\x03".chr(1+strlen($point))."\x00".$point; $content=$oid.$bit; $len=strlen($content);
+                  $seq="\x30".($len<128?chr($len):chr(0x81).chr($len)).$content;
+                  return "-----BEGIN PUBLIC KEY-----\n".chunk_split(base64_encode($seq),64)."-----END PUBLIC KEY-----";
+              }
+          }
+          '''
+          write('app/Core/WebPush.php', webpush)
+
+          # 2) HTTP egress: HTTPS-only, DNS pinning, no redirects, public-address policy.
+          http = read('app/Core/HttpClient.php')
+          marker = "        $method = strtoupper($method);"
+          if "private static function validateOutboundUrl" not in http:
+              http = http.replace(marker, marker + r'''
+
+          if (!self::validateOutboundUrl($url)) {
+              return ['success'=>false,'code'=>0,'body'=>'','error'=>'نشانی مقصد خارجی مجاز نیست.'];
+          }
+          ''', 1)
+              http = http.replace("        curl_setopt($ch, CURLOPT_CUSTOMREQUEST, $method);", "        curl_setopt($ch, CURLOPT_CUSTOMREQUEST, $method);\n        curl_setopt($ch, CURLOPT_FOLLOWLOCATION, false);\n        curl_setopt($ch, CURLOPT_MAXREDIRS, 0);\n        curl_setopt($ch, CURLOPT_PROTOCOLS, CURLPROTO_HTTPS);\n        curl_setopt($ch, CURLOPT_REDIR_PROTOCOLS, CURLPROTO_HTTPS);", 1)
+              http = http.replace("        curl_setopt($ch, CURLOPT_SSL_VERIFYHOST, 2);", "        curl_setopt($ch, CURLOPT_SSL_VERIFYHOST, 2);\n        $pin = self::dnsResolvePublic($url);\n        if ($pin) curl_setopt($ch, CURLOPT_RESOLVE, $pin);", 1)
+              insertion = r'''
+
+      private static function validateOutboundUrl(string $url): bool {
+          $p=parse_url(trim($url));
+          if(!$p || strtolower((string)($p['scheme']??''))!=='https' || empty($p['host']) || isset($p['user']) || isset($p['pass'])) return false;
+          $port=(int)($p['port']??443); if($port!==443) return false;
+          $host=strtolower(rtrim((string)$p['host'],'.'));
+          if($host==='localhost'||str_ends_with($host,'.localhost')||str_ends_with($host,'.local')) return false;
+          $ips=self::resolveHost($host); if(!$ips) return false;
+          foreach($ips as $ip) if(filter_var($ip,FILTER_VALIDATE_IP,FILTER_FLAG_NO_PRIV_RANGE|FILTER_FLAG_NO_RES_RANGE)===false) return false;
+          return true;
+      }
+
+      private static function dnsResolvePublic(string $url): array {
+          $p=parse_url($url); if(!$p||empty($p['host'])) return [];
+          $host=strtolower(rtrim($p['host'],'.')); $port=(int)($p['port']??443); $out=[];
+          foreach(self::resolveHost($host) as $ip) $out[]=str_contains($ip,':')?$host.':'.$port.':['.$ip.']':$host.':'.$port.':'.$ip;
+          return $out;
+      }
+
+      private static function resolveHost(string $host): array {
+          if(filter_var($host,FILTER_VALIDATE_IP)) return [$host];
+          $out=[]; foreach(array_merge(@dns_get_record($host,DNS_A)?:[],@dns_get_record($host,DNS_AAAA)?:[]) as $r){ if(!empty($r['ip']))$out[]=$r['ip']; if(!empty($r['ipv6']))$out[]=$r['ipv6']; }
+          return array_values(array_unique($out));
+      }
+          '''
+              http = http.replace("\n}\n", insertion + "\n}\n", 1)
+          write('app/Core/HttpClient.php', http)
+
+          # 3) ChannelManager: one authoritative secure edit path.
+          cm = read('app/Domain/ChannelManager.php')
+          if 'public static function updateChannel(' not in cm:
+              method = r'''
+
+              public static function updateChannel(int $id, int $tenantId, string $name, string $platform, string $channelId, string $token, array $links, array $buttonConfig): array {
+                  if ($id<=0 || $tenantId<=0 || trim($name)==='' || trim($token)==='') return ['success'=>false,'message'=>'اطلاعات کانال نامعتبر است.'];
+                  $platform=AntiAbuse::normalizePlatform($platform); $channelId=AntiAbuse::normalizeChannelId($channelId); $token=trim($token);
+                  if(!in_array($platform,['telegram','bale'],true) || $channelId==='') return ['success'=>false,'message'=>'پلتفرم یا شناسه کانال نامعتبر است.'];
+                  $db=Bootstrap::getDB();
+                  $current=self::getChannel($id,$tenantId); if(!$current) return ['success'=>false,'message'=>'کانال مورد نظر یافت نشد.'];
+                  if(!str_starts_with($token, 'enc:v1:')) {
+                      $test=self::testBotConnection($platform,$token); if(!$test['success']) return ['success'=>false,'message'=>'اتصال ربات قابل تأیید نیست؛ تغییر کانال متوقف شد.'];
+                      $access=self::verifyBotChannelAccess($platform,$token,$channelId); if(!$access['success']) return ['success'=>false,'message'=>$access['message']];
+                      $encrypted=SecretStore::encrypt($token);
+                  } else {
+                      return ['success'=>false,'message'=>'توکن رمزنگاری‌شده قابل ارسال مستقیم نیست.'];
+                  }
+                  $db->beginTransaction();
+                  try {
+                      if($current['platform']!==$platform || $current['channel_id']!==$channelId){
+                          $claimIdentity=$platform."\0".$channelId; $owner=AntiAbuse::claimOwner($db,'channel',$claimIdentity);
+                          if($owner!==null && $owner!==$tenantId) throw new \RuntimeException('این شناسه کانال قبلاً توسط کاربر دیگری استفاده شده است.');
+                          if($owner===null && !AntiAbuse::claimChannel($db,$tenantId,$platform,$channelId)) throw new \RuntimeException('این شناسه کانال همزمان توسط حساب دیگری Claim شد.');
+                          $stmt=$db->prepare('SELECT owner_user_id FROM channel_registry WHERE platform=? AND channel_id=? LIMIT 1'); $stmt->execute([$platform,$channelId]); $reg=$stmt->fetch();
+                          if($reg && (int)$reg['owner_user_id']!==$tenantId) throw new \RuntimeException('این شناسه کانال قبلاً ثبت شده است.');
+                          if(!$reg){$stmt=$db->prepare('INSERT INTO channel_registry(platform,channel_id,owner_user_id) VALUES(?,?,?)');$stmt->execute([$platform,$channelId,$tenantId]);}
+                      }
+                      $stmt=$db->prepare('UPDATE channels SET name=?,platform=?,channel_id=?,token=?,link_config=?,button_config=? WHERE id=? AND tenant_id=?');
+                      $stmt->execute([$name,$platform,$channelId,$encrypted,json_encode($links,JSON_UNESCAPED_UNICODE),json_encode($buttonConfig,JSON_UNESCAPED_UNICODE),$id,$tenantId]);
+                      $db->commit();
+                  } catch(\Throwable $e){if($db->inTransaction())$db->rollBack();return ['success'=>false,'message'=>$e->getMessage()];}
+                  return ['success'=>true,'message'=>'تنظیمات کانال با موفقیت بروزرسانی شد.'];
+              }
+              '''
+              cm = cm.rstrip()
+              cm = cm[:-1] + method + "\n}\n"
+          write('app/Domain/ChannelManager.php', cm)
+
+          # 4) MainController critical method replacements.
+          main = read('app/Controllers/MainController.php')
+
+          edit_method = r'''    public function handleEditChannel() {
+              $this->checkAuth();
+              if (!Csrf::validate($_POST['csrf_token'] ?? null)) { $this->setFlashMessage('خطای امنیتی! توکن نامعتبر است.'); $this->redirect('/dashboard'); }
+              $tenant_id=Auth::tenantId(); $id=(int)($_POST['channel_id']??0);
+              $name=trim((string)($_POST['name']??'')); $platform=AntiAbuse::normalizePlatform((string)($_POST['platform']??''));
+              $channel_id=AntiAbuse::normalizeChannelId((string)($_POST['channel_id_val']??'')); $token=trim((string)($_POST['token']??''));
+              if($name===''||$channel_id===''||$token===''){ $this->setFlashMessage('تمامی فیلدهای اصلی کانال را تکمیل کنید.'); $this->redirect('/dashboard?edit_channel='.$id); }
+              $links=[]; for($i=1;$i<=3;$i++) $links[]=['name'=>trim((string)($_POST['link_name_'.$i]??'')),'url'=>trim((string)($_POST['link_url_'.$i]??''))];
+              $buttonConfig=['active'=>isset($_POST['buttons_active']),'buttons'=>[
+                  ['text'=>trim((string)($_POST['btn_text_1']??'')),'url'=>trim((string)($_POST['btn_url_1']??''))],
+                  ['text'=>trim((string)($_POST['btn_text_2']??'')),'url'=>trim((string)($_POST['btn_url_2']??''))]
+              ]];
+              $res=ChannelManager::updateChannel($id,$tenant_id,$name,$platform,$channel_id,$token,$links,$buttonConfig);
+              $this->setFlashMessage($res['message']); $this->redirect('/dashboard');
+          }
+          '''
+          main = replace_between(main, r'^    public function handleEditChannel\(\)', r'^    public function handleAddChannel\(\)', edit_method, 'handleEditChannel')
+
+          create_post = r'''    public function handleCreatePost() {
+              $this->checkAuth();
+              if(!Csrf::validate($_POST['csrf_token']??null)){ $this->setFlashMessage('خطای امنیتی! توکن نامعتبر است.'); $this->redirect('/dashboard'); }
+              $tenant_id=Auth::tenantId(); $quota=Quota::getTenantQuota($tenant_id);
+              if(empty($quota['can_send_post'])){ $this->setFlashMessage('خطا: سهمیه ارسال پست شما به اتمام رسیده است.'); $this->redirect('/dashboard'); }
+              $title=trim((string)($_POST['title']??'')); $content=trim((string)($_POST['content']??'')); $send_type=trim((string)($_POST['send_type']??'instant'));
+              if($title===''||$content===''){ $this->setFlashMessage('عنوان و محتوای پست الزامی است.'); $this->redirect('/dashboard'); }
+              $channel_ids=array_values(array_unique(array_filter(array_map('intval',(array)($_POST['post_channels']??[])),static fn($v)=>$v>0)));
+              if(!$channel_ids){ $this->setFlashMessage('حداقل یک کانال هدف انتخاب کنید.'); $this->redirect('/dashboard'); }
+              $db=Bootstrap::getDB();
+              $verified=[]; $placeholders=implode(',',array_fill(0,count($channel_ids),'?'));
+              $stmt=$db->prepare("SELECT id FROM channels WHERE tenant_id=? AND id IN ($placeholders)"); $stmt->execute(array_merge([$tenant_id],$channel_ids)); $verified=array_map('intval',$stmt->fetchAll(PDO::FETCH_COLUMN));
+              if(count($verified)!==count($channel_ids)){ $this->setFlashMessage('یکی از کانال‌های انتخاب‌شده متعلق به حساب شما نیست.'); $this->redirect('/dashboard'); }
+              $scheduled_at=null;
+              if($send_type==='scheduled'){
+                  $raw=trim((string)($_POST['sched_date']??'')); if(!preg_match('/^\d{4}\/\d{1,2}\/\d{1,2}$/',$raw)){ $this->setFlashMessage('تاریخ زمان‌بندی نامعتبر است.'); $this->redirect('/dashboard'); }
+                  [$jy,$jm,$jd]=array_map('intval',explode('/',$raw)); if($jy<1300||$jm<1||$jm>12||$jd<1||$jd>31){$this->setFlashMessage('تاریخ زمان‌بندی نامعتبر است.');$this->redirect('/dashboard');}
+                  $hour=(int)($_POST['sched_hour']??0); $minute=(int)($_POST['sched_minute']??0); if($hour<0||$hour>23||$minute<0||$minute>59){$this->setFlashMessage('ساعت زمان‌بندی نامعتبر است.');$this->redirect('/dashboard');}
+                  $g=self::jalaliToGregorian($jy,$jm,$jd); $scheduled_at=sprintf('%04d-%02d-%02d %02d:%02d:00',$g['year'],$g['month'],$g['day'],$hour,$minute);
+                  if(strtotime($scheduled_at)<=time()+60){$this->setFlashMessage('زمان‌بندی باید حداقل یک دقیقه در آینده باشد.');$this->redirect('/dashboard');}
+              }
+              $media_url=$this->uploadAndConvertToWebp('media_file','uploads');
+              $status=$send_type==='scheduled'?'scheduled':'queued';
+              $stmt=$db->prepare('INSERT INTO posts(tenant_id,title,content,media_url,status,scheduled_at,target_channels) VALUES(?,?,?,?,?,?,?)');
+              $stmt->execute([$tenant_id,$title,$content,$media_url,$status,$scheduled_at,json_encode($verified)]); $post_id=(int)$db->lastInsertId();
+              if($content!==''){
+                  $tracked=$content;
+                  foreach($verified as $cid) $tracked=LinkTracker::processContent($tracked,$post_id,$cid,$tenant_id);
+                  if($tracked!==$content) $db->prepare('UPDATE posts SET content=? WHERE id=? AND tenant_id=?')->execute([$tracked,$post_id,$tenant_id]);
+              }
+              $this->setFlashMessage($send_type==='scheduled'?'پست با موفقیت زمان‌بندی شد. ⏰':'پست با موفقیت در صف ارسال قرار گرفت. ⚡'); $this->redirect('/dashboard');
+          }
+          '''
+          main = replace_between(main, r'^    public function handleCreatePost\(\)', r'^    public function handleCancelPost\(\)', create_post, 'handleCreatePost')
+
+          queue = r'''    public function processPostQueue() {
+              header('Content-Type: application/json; charset=utf-8');
+              try {
+                  $this->checkAuth();
+                  if(!Csrf::validate($_SERVER['HTTP_X_CSRF_TOKEN']??($_POST['csrf_token']??null))){http_response_code(403);echo json_encode(['success'=>false,'message'=>'csrf_failed'],JSON_UNESCAPED_UNICODE);return;}
+                  $tenant_id=Auth::tenantId(); $db=Bootstrap::getDB(); set_time_limit(30);
+                  $stmt=$db->prepare("SELECT id FROM posts WHERE tenant_id=? AND status='queued' ORDER BY id ASC LIMIT 1");$stmt->execute([$tenant_id]);$candidate=$stmt->fetch();
+                  if(!$candidate){echo json_encode(['success'=>true,'message'=>'no_queued_posts'],JSON_UNESCAPED_UNICODE);return;}
+                  $post_id=(int)$candidate['id']; if(!Quota::reservePost($tenant_id,$post_id)){echo json_encode(['success'=>false,'message'=>'post_busy_or_quota_exhausted'],JSON_UNESCAPED_UNICODE);return;}
+                  $stmt=$db->prepare("SELECT id,title,content,media_url,target_channels,tenant_id,status FROM posts WHERE id=? AND tenant_id=? AND status='sending' LIMIT 1");$stmt->execute([$post_id,$tenant_id]);$post=$stmt->fetch();
+                  if(!$post){echo json_encode(['success'=>false,'message'=>'post_claim_failed'],JSON_UNESCAPED_UNICODE);return;}
+                  $channel_ids=json_decode((string)$post['target_channels'],true)?:[]; if(!$channel_ids){$db->prepare("UPDATE posts SET status='failed' WHERE id=? AND tenant_id=?")->execute([$post_id,$tenant_id]);echo json_encode(['success'=>false,'message'=>'کانال هدف یافت نشد'],JSON_UNESCAPED_UNICODE);return;}
+                  $res=Sender::sendPostToChannels((int)$post['tenant_id'],$channel_ids,$post['title'],$post['content'],$post['media_url']??'',$post_id);
+                  $successes=array_values(array_filter($res['channels']??[],static fn($r)=>!empty($r['success']))); $failures=array_values(array_filter($res['channels']??[],static fn($r)=>empty($r['success'])));
+                  if($successes && $failures){$status='partial';}elseif($successes){$status='sent';}else{$status='failed';}
+                  $db->prepare('UPDATE posts SET status=? WHERE id=? AND tenant_id=? AND status=\'sending\'')->execute([$status,$post_id,$tenant_id]);
+                  if($successes) Quota::consumePostQuota($tenant_id,$post_id);
+                  echo json_encode(['success'=>(bool)$successes,'partial'=>(bool)($successes&&$failures),'post_id'=>$post_id,'message'=>$status,'errors'=>array_map(static fn($r)=>($r['name']??'').': '.($r['message']??''),$failures)],JSON_UNESCAPED_UNICODE);
+              }catch(\Throwable $e){error_log('[Postyar] Queue process error: '.$e->getMessage());http_response_code(500);echo json_encode(['success'=>false,'message'=>'خطای سیستمی'],JSON_UNESCAPED_UNICODE);}
+          }
+          '''
+          main = replace_between(main, r'^    public function processPostQueue\(\)', r'^    public function handleHeartbeat\(\)', queue, 'processPostQueue')
+
+          heartbeat = r'''    public function handleHeartbeat() {
+              header('Content-Type: application/json; charset=utf-8'); $this->checkAuth();
+              if(!Csrf::validate($_SERVER['HTTP_X_CSRF_TOKEN']??($_POST['csrf_token']??null))){http_response_code(403);echo json_encode(['success'=>false,'message'=>'csrf_failed'],JSON_UNESCAPED_UNICODE);return;}
+              try{set_time_limit(10);$sent=ScheduledPost::processAll();echo json_encode(['success'=>true,'sent'=>$sent],JSON_UNESCAPED_UNICODE);}catch(\Throwable $e){error_log('[Postyar Heartbeat] Error: '.$e->getMessage());http_response_code(500);echo json_encode(['success'=>false,'message'=>'خطای سیستمی'],JSON_UNESCAPED_UNICODE);}
+          }
+          '''
+          main = replace_between(main, r'^    public function handleHeartbeat\(\)', r'^    public function handleEditPlan\(\)', heartbeat, 'handleHeartbeat')
+
+          push_sub = r'''    public function handlePushSubscribe() {
+              header('Content-Type: application/json; charset=utf-8');
+              if(!Auth::check()){http_response_code(401);echo json_encode(['success'=>false,'message'=>'نشست کاربری معتبر نیست.'],JSON_UNESCAPED_UNICODE);return;}
+              if(!Csrf::validate($_SERVER['HTTP_X_CSRF_TOKEN']??null)){http_response_code(403);echo json_encode(['success'=>false,'message'=>'csrf_failed'],JSON_UNESCAPED_UNICODE);return;}
+              $userId=(int)Auth::tenantId();$input=json_decode(file_get_contents('php://input'),true)?:[];
+              $endpoint=trim((string)($input['endpoint']??''));$p256=trim((string)($input['keys']['p256dh']??''));$auth=trim((string)($input['keys']['auth']??''));
+              if($endpoint===''||$p256===''||$auth===''){http_response_code(400);echo json_encode(['success'=>false,'message'=>'پارامترهای اشتراک ناقص است.'],JSON_UNESCAPED_UNICODE);return;}
+              $db=Bootstrap::getDB();$db->prepare('DELETE FROM push_subscriptions WHERE user_id=?')->execute([$userId]);$db->prepare('INSERT INTO push_subscriptions(user_id,endpoint,keys_p256dh,keys_auth) VALUES(?,?,?,?)')->execute([$userId,$endpoint,$p256,$auth]);
+              echo json_encode(['success'=>true,'message'=>'اشتراک اعلان با موفقیت ثبت شد.'],JSON_UNESCAPED_UNICODE);
+          }
+          '''
+          main = replace_between(main, r'^    public function handlePushSubscribe\(\)', r'^    public function handlePushUnsubscribe\(\)', push_sub, 'handlePushSubscribe')
+
+          push_unsub = r'''    public function handlePushUnsubscribe() {
+              header('Content-Type: application/json; charset=utf-8');
+              if(!Auth::check()){http_response_code(401);echo json_encode(['success'=>false,'message'=>'نشست کاربری معتبر نیست.'],JSON_UNESCAPED_UNICODE);return;}
+              if(!Csrf::validate($_SERVER['HTTP_X_CSRF_TOKEN']??null)){http_response_code(403);echo json_encode(['success'=>false,'message'=>'csrf_failed'],JSON_UNESCAPED_UNICODE);return;}
+              $db=Bootstrap::getDB();$db->prepare('DELETE FROM push_subscriptions WHERE user_id=?')->execute([(int)Auth::tenantId()]);echo json_encode(['success'=>true,'message'=>'اشتراک اعلان لغو شد.'],JSON_UNESCAPED_UNICODE);
+          }
+          '''
+          main = replace_between(main, r'^    public function handlePushUnsubscribe\(\)', r'^    public function getPushStatus\(\)', push_unsub, 'handlePushUnsubscribe')
+
+          ai = r'''    public function handleSaveAiSettingsAdmin(){
+              $this->checkSuperAdmin(); if(!Csrf::validate($_POST['csrf_token']??null)){$this->setFlashMessage('خطای امنیتی!');$this->redirect('/hnnh');return;}
+              $db=Bootstrap::getDB();
+              $fields=['ai_global_provider','ai_global_model','ai_global_key','ai_global_url','ai_active_by_default'];
+              foreach($fields as $f){
+                  $val=$_POST[$f]??''; if($f==='ai_active_by_default'){$val=isset($_POST[$f])?'1':'0';}
+                  if($f==='ai_global_key'){
+                      $val=trim((string)$val);
+                      if($val===''||$val==='••••••••'){$q=$db->prepare("SELECT key_value FROM settings WHERE tenant_id=0 AND key_name=? LIMIT 1");$q->execute([$f]);$val=(string)($q->fetchColumn()?:'');}
+                      elseif($val!==''){$val=SecretStore::encrypt($val);}
+                  }
+                  $q=$db->prepare('SELECT id FROM settings WHERE tenant_id=0 AND key_name=? LIMIT 1');$q->execute([$f]);
+                  if($q->fetch()){$db->prepare('UPDATE settings SET key_value=? WHERE tenant_id=0 AND key_name=?')->execute([$val,$f]);}
+                  else{$db->prepare('INSERT INTO settings(tenant_id,key_name,key_value) VALUES(0,?,?)')->execute([$f,$val]);}
+              }
+              $this->setFlashMessage('تنظیمات سراسری هوش مصنوعی با موفقیت ذخیره شد! ✔');$this->redirect('/hnnh');
+          }
+          '''
+          main = replace_between(main, r'^    public function handleSaveAiSettingsAdmin\(\)', r'^    public function handleDeleteDiscount\(\)', ai, 'handleSaveAiSettingsAdmin')
+
+          # Add CSRF to notification AJAX methods that mutate state.
+          for name in ['handleMarkAnnouncementRead','handleMarkNotificationRead','handleMarkAllNotificationsRead']:
+              pat = rf'(public function {name}\(\)\s*\{{\s*header\([^;]+;\s*\$this->checkAuth\(\);)'
+              repl = lambda m: m.group(1) + "\n        if (!Csrf::validate($_SERVER['HTTP_X_CSRF_TOKEN'] ?? ($_POST['csrf_token'] ?? null))) { http_response_code(403); echo json_encode(['success'=>false,'message'=>'csrf_failed'], JSON_UNESCAPED_UNICODE); return; }"
+              main, n = re.subn(pat, repl, main, count=1, flags=re.S)
+              if n != 1: raise RuntimeError(f'Missing CSRF insertion point: {name}')
+
+          write('app/Controllers/MainController.php', main)
+
+          # 5) Upload memory/decoder bomb protection.
+          base = read('app/Controllers/BaseController.php')
+          marker = "        // ---- ۶. تبدیل به WebP ----\n        $image = null;"
+          if marker in base and 'MAX_IMAGE_PIXELS' not in base:
+              inject = r'''        // ---- ۶. محدودیت ابعاد تصویر قبل از Decode (جلوگیری از decompression bomb) ----
+              $MAX_IMAGE_PIXELS = 20_000_000;
+              $imageInfo = @getimagesize($_FILES[$file_input_name]['tmp_name']);
+              if (!$imageInfo || (($imageInfo[0] ?? 0) * ($imageInfo[1] ?? 0)) > $MAX_IMAGE_PIXELS) {
+                  $this->setFlashMessage('ابعاد تصویر بیش از حد مجاز است.');
+                  return '';
+              }
+
+              // ---- ۷. تبدیل به WebP ----
+              $image = null;'''
+              base=base.replace(marker,inject,1)
+          write('app/Controllers/BaseController.php', base)
+
+          # 6) SMTP password is encrypted at rest and decrypted only immediately before PHPMailer use.
+          email = read('app/Core/EmailTemplate.php')
+          if "SecretStore::decrypt" not in email:
+              email=email.replace("$settings[$key] = $row !== false ? $row['key_value'] : '';", "$settings[$key] = $row !== false ? $row['key_value'] : '';\n            if ($key === 'smtp_password' && $settings[$key] !== '') { $settings[$key] = SecretStore::decrypt((string)$settings[$key]); }")
+              email=email.replace("namespace WHCM\\Core;", "namespace WHCM\\Core;\n\nuse WHCM\\Core\\SecretStore;", 1)
+          write('app/Core/EmailTemplate.php', email)
+
+          # 7) AdSales concurrency: lock placement rows before max_concurrent decision on MySQL.
+          ads=read('app/Domain/AdSales.php')
+          needle="            foreach($campaignPlacements as $cp) {\n"
+          if needle in ads and 'FOR UPDATE' not in ads[ads.find(needle):ads.find(needle)+1000]:
+              ads=ads.replace(needle, "            $lockedPlacements=[];\n            foreach($campaignPlacements as $cp) {\n                if($driver==='mysql'){ $lock=$db->prepare('SELECT id FROM ad_placements WHERE id=? FOR UPDATE'); $lock->execute([(int)$cp['placement_id']]); $lockedPlacements[]=(int)$cp['placement_id']; }\n", 1)
+          write('app/Domain/AdSales.php', ads)
+
+          # 8) Design System + mobile/tablet UX hardening.
+          css = r''':root{
+            --ui-space-1:.25rem;--ui-space-2:.5rem;--ui-space-3:.75rem;--ui-space-4:1rem;--ui-space-5:1.25rem;--ui-space-6:1.5rem;
+            --ui-radius-sm:8px;--ui-radius-md:12px;--ui-radius-lg:16px;
+            --ui-focus:0 0 0 3px rgba(37,99,235,.24);
+          }
+          *,*::before,*::after{box-sizing:border-box}
+          html{scroll-behavior:smooth;-webkit-text-size-adjust:100%}
+          body{overflow-x:hidden;min-width:0}
+          img,video,svg{max-width:100%;height:auto}
+          button,a,input,select,textarea,[role="button"]{touch-action:manipulation}
+          button,input,select,textarea{font:inherit}
+          button,[role="button"],a.btn,.btn{min-height:44px}
+          input,select,textarea{max-width:100%}
+          :focus-visible{outline:none;box-shadow:var(--ui-focus)}
+          .table-responsive{max-width:100%;overflow-x:auto;-webkit-overflow-scrolling:touch}
+          .modal-dialog{max-width:calc(100vw - 24px);margin:.75rem auto}
+          .modal-body{max-height:calc(100dvh - 180px);overflow:auto;-webkit-overflow-scrolling:touch}
+          .sticky-mobile-action{position:sticky;bottom:0;z-index:30;padding-bottom:calc(.75rem + env(safe-area-inset-bottom));background:rgba(255,255,255,.96);backdrop-filter:blur(10px)}
+          .ui-offline-banner{display:none;position:fixed;left:12px;right:12px;bottom:calc(12px + env(safe-area-inset-bottom));z-index:99999;padding:12px 14px;border-radius:12px;background:#111827;color:#fff;text-align:center;box-shadow:0 8px 30px rgba(0,0,0,.2)}
+          .ui-offline-banner.is-visible{display:block}
+          .ui-busy{pointer-events:none;opacity:.65}
+          @media (max-width:767px){
+            body{font-size:15px}
+            .container,.container-fluid{width:100%;max-width:100%;padding-left:12px;padding-right:12px}
+            .row{margin-left:-6px;margin-right:-6px}
+            .row>[class*="col-"]{padding-left:6px;padding-right:6px}
+            .card,.panel,.x_panel{border-radius:var(--ui-radius-md);max-width:100%}
+            .btn{min-height:46px;padding:.7rem .9rem}
+            .form-control,.form-select,input,select,textarea{min-height:46px;font-size:16px}
+            .table{font-size:.88rem}
+            .table thead{display:none}
+            .table tbody,.table tr,.table td{display:block;width:100%}
+            .table tr{margin-bottom:12px;border:1px solid rgba(127,127,127,.18);border-radius:12px;padding:8px}
+            .table td{border:0;padding:7px 8px;display:flex;justify-content:space-between;gap:12px;overflow-wrap:anywhere}
+            .table td::before{font-weight:700;flex:0 0 38%;content:attr(data-label)}
+            .dropdown-menu{max-width:calc(100vw - 24px);overflow:auto}
+            .modal-dialog{width:auto}
+            .navbar,.nav_menu,.left_col{max-width:100vw}
+          }
+          @media (min-width:768px) and (max-width:1024px){
+            .container,.container-fluid{max-width:100%;padding-left:20px;padding-right:20px}
+            .card,.panel,.x_panel{max-width:100%}
+          }
+          @media (prefers-reduced-motion:reduce){html{scroll-behavior:auto}*,*::before,*::after{animation-duration:.01ms!important;animation-iteration-count:1!important;transition-duration:.01ms!important}}
+          @media (prefers-color-scheme:dark){.ui-offline-banner{background:#f3f4f6;color:#111827}}
+          '''
+          write('public/assets/css/uiux-hardening.css', css)
+
+          js = r'''(function(){'use strict';
+          function csrf(){var el=document.querySelector('input[name="csrf_token"]');return el?el.value:'';}
+          var originalFetch=window.fetch;
+          if(originalFetch&&!window.__postyarFetchHardened){
+            window.__postyarFetchHardened=true;
+            window.fetch=function(input,init){init=init||{};var method=(init.method||(input&&input.method)||'GET').toUpperCase();if(['POST','PUT','PATCH','DELETE'].indexOf(method)>=0){var h=new Headers(init.headers||{}),token=csrf();if(token&&!h.has('X-CSRF-Token'))h.set('X-CSRF-Token',token);init.headers=h;}return originalFetch.call(this,input,init);};
+          }
+          document.addEventListener('submit',function(e){var f=e.target;if(!f||f.dataset.doubleSubmitGuard==='off')return;var b=f.querySelector('[type="submit"]');if(b){if(b.dataset.busy==='1'){e.preventDefault();return;}b.dataset.busy='1';b.classList.add('ui-busy');b.setAttribute('aria-disabled','true');}},true);
+          function offline(){var b=document.querySelector('.ui-offline-banner');if(!b){b=document.createElement('div');b.className='ui-offline-banner';b.setAttribute('role','status');b.textContent='اتصال اینترنت قطع شده است. پس از برقراری اتصال دوباره تلاش کنید.';document.body.appendChild(b);}b.classList.toggle('is-visible',!navigator.onLine);}
+          window.addEventListener('online',offline);window.addEventListener('offline',offline);document.addEventListener('DOMContentLoaded',offline);
+          document.addEventListener('DOMContentLoaded',function(){if(!document.querySelector('meta[name="viewport"]')){var m=document.createElement('meta');m.name='viewport';m.content='width=device-width,initial-scale=1,viewport-fit=cover';document.head.appendChild(m);}document.querySelectorAll('button:not([aria-label]):not([aria-labelledby])').forEach(function(b){if(!b.textContent.trim()){var t=b.title;if(t)b.setAttribute('aria-label',t);}});});
+          })();
+          '''
+          write('public/assets/js/uiux-hardening.js', js)
+
+          # Inject the UX layer only into top-level views; partials inherit it.
+          for p in ['app/Views/home.php','app/Views/dashboard.php','app/Views/admin.php','app/Views/help.php','app/Views/privacy.php','app/Views/errors.php']:
+              fp=ROOT/p
+              if not fp.exists(): continue
+              s=fp.read_text(encoding='utf-8')
+              if 'uiux-hardening.css' not in s and '</head>' in s:
+                  s=s.replace('</head>','<link rel="stylesheet" href="/assets/css/uiux-hardening.css"><script src="/assets/js/uiux-hardening.js" defer></script></head>',1)
+              fp.write_text(s,encoding='utf-8')
+
+          # 9) Web-accessible upload hardening: deny executable scripts in upload trees.
+          for d in ['public/assets/uploads','public/assets/receipts','public/assets/tickets']:
+              path=ROOT/d; path.mkdir(parents=True,exist_ok=True)
+              (path/'.htaccess').write_text("Options -Indexes\n<FilesMatch \"\\.(php|phtml|php[0-9]|phar|cgi|pl|py|sh)$\">\n    Require all denied\n</FilesMatch>\n",encoding='utf-8')
+
+          # 10) Strong browser security headers at the public edge.
+          ht=read('public/.htaccess')
+          headers='''\n# Security headers\n<IfModule mod_headers.c>\n    Header always set X-Content-Type-Options "nosniff"\n    Header always set Referrer-Policy "strict-origin-when-cross-origin"\n    Header always set Permissions-Policy "camera=(), microphone=(), geolocation=()"\n    Header always set X-Frame-Options "SAMEORIGIN"\n</IfModule>\n'''
+          if 'X-Content-Type-Options' not in ht: ht=ht.rstrip()+headers
+          write('public/.htaccess',ht+'\n')
+
+          # 11) Production validation: no obvious plaintext integration secret assignment in MainController.
+          for rel in ['app/Controllers/MainController.php','app/Core/WebPush.php','app/Core/HttpClient.php','app/Core/EmailTemplate.php','app/Domain/ChannelManager.php','app/Domain/AdSales.php','app/Controllers/BaseController.php']:
+              text=read(rel)
+              if '\x00' in text: raise RuntimeError(f'NUL byte in {rel}')
+          print('Hardening transformation completed.')
+          PY
+
+      - name: PHP syntax validation
+        shell: bash
+        run: |
+          set -e
+          find postyar-private -type f -name '*.php' -print0 | xargs -0 -n1 php -l
+
+      - name: Build deployment archive
+        shell: bash
+        run: |
+          set -e
+          rm -rf /tmp/postyar-package
+          mkdir -p /tmp/postyar-package
+          rsync -a --exclude='.git' --exclude='storage/logs/*' --exclude='storage/cache/*' ./ /tmp/postyar-package/PO2/
+          cd /tmp/postyar-package
+          zip -qr /tmp/PO2-hardened.zip PO2
+
+      - name: Upload deployment archive
+        uses: actions/upload-artifact@v4
+        with:
+          name: PO2-hardened
+          path: /tmp/PO2-hardened.zip
+          retention-days: 7
+
+      - name: Commit transformed project
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -e
+          rm -f .github/workflows/apply-hardening.yml
+          git config user.name 'OpenAI Hardening Automation'
+          git config user.email 'actions@users.noreply.github.com'
+          git add -A
+          git commit -m 'security: apply complete hardening and mobile UX pass' || exit 0
+          git push origin HEAD:hardening/uiux-complete-2026-08

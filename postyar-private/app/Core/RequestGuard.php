@@ -4,119 +4,29 @@ namespace WHCM\Core;
 use WHCM\Domain\ChannelManager;
 use WHCM\Domain\AntiAbuse;
 
-/**
- * Centralized request security boundary for the web router.
- * Mobile API requests are dispatched before this class is invoked.
- */
 final class RequestGuard
 {
-    private const PUBLIC_POST_ROUTES = [
-        '/api/webhook',
-        '/ads/impression',
-    ];
-
-    public static function enforce(): void
-    {
-        self::securityHeaders();
-
-        $method = strtoupper((string)($_SERVER['REQUEST_METHOD'] ?? 'GET'));
-        if (!in_array($method, ['POST', 'PUT', 'PATCH', 'DELETE'], true)) {
-            return;
-        }
-
-        $path = parse_url((string)($_SERVER['REQUEST_URI'] ?? '/'), PHP_URL_PATH) ?: '/';
-        if (in_array($path, self::PUBLIC_POST_ROUTES, true)) {
-            return;
-        }
-
-        $token = $_SERVER['HTTP_X_CSRF_TOKEN'] ?? ($_POST['csrf_token'] ?? null);
-        if (!Csrf::validate($token)) {
-            self::jsonOrHtmlError(403, 'csrf_failed', 'درخواست امنیتی نامعتبر است. صفحه را تازه‌سازی کنید و دوباره تلاش کنید.');
-        }
-
-        if ($path === '/dashboard/edit-channel') {
-            self::secureChannelEdit();
-        }
-
-        if ($path === '/hnnh/save-ai-settings-admin') {
-            self::secureGlobalAiKey();
-        }
+    private const PUBLIC_POST_ROUTES=['/api/webhook','/ads/impression'];
+    public static function enforce(): void{
+        self::securityHeaders();$method=strtoupper((string)($_SERVER['REQUEST_METHOD']??'GET'));if(!in_array($method,['POST','PUT','PATCH','DELETE'],true))return;
+        self::secureUploads();
+        $path=parse_url((string)($_SERVER['REQUEST_URI']??'/'),PHP_URL_PATH)?:'/';if(in_array($path,self::PUBLIC_POST_ROUTES,true))return;
+        $token=$_SERVER['HTTP_X_CSRF_TOKEN']??($_POST['csrf_token']??null);if(!Csrf::validate($token))self::jsonOrHtmlError(403,'csrf_failed','درخواست امنیتی نامعتبر است. صفحه را تازه‌سازی کنید و دوباره تلاش کنید.');
+        if($path==='/dashboard/edit-channel')self::secureChannelEdit();
+        if($path==='/hnnh/save-ai-settings-admin')self::secureGlobalAiKey();
     }
-
-    private static function secureChannelEdit(): void
-    {
-        if (!Auth::check()) {
-            self::jsonOrHtmlError(401, 'unauthorized', 'نشست کاربری معتبر نیست.');
-        }
-
-        $tenantId = (int)Auth::tenantId();
-        $id = (int)($_POST['channel_id'] ?? 0);
-        $platform = AntiAbuse::normalizePlatform((string)($_POST['platform'] ?? ''));
-        $channelId = AntiAbuse::normalizeChannelId((string)($_POST['channel_id_val'] ?? ''));
-        $token = trim((string)($_POST['token'] ?? ''));
-
-        if ($tenantId <= 0 || $id <= 0 || $channelId === '' || $token === '') {
-            self::jsonOrHtmlError(422, 'invalid_channel', 'اطلاعات کانال نامعتبر است.');
-        }
-
-        $channel = ChannelManager::getChannel($id, $tenantId);
-        if (!$channel) {
-            self::jsonOrHtmlError(404, 'channel_not_found', 'کانال مورد نظر یافت نشد.');
-        }
-
-        // A web form never receives an encrypted token. If one is submitted, reject it
-        // instead of allowing a ciphertext value to be treated as a bot credential.
-        if (str_starts_with($token, 'enc:v1:')) {
-            self::jsonOrHtmlError(422, 'invalid_channel_token', 'توکن کانال نامعتبر است.');
-        }
-
-        $platform = AntiAbuse::normalizePlatform($platform);
-        $access = ChannelManager::verifyBotChannelAccess($platform, $token, $channelId);
-        if (!$access['success']) {
-            self::jsonOrHtmlError(422, 'channel_access_denied', (string)$access['message']);
-        }
-
-        // MainController still performs its legacy UPDATE path. Encrypting here keeps
-        // the legacy path safe without allowing plaintext credentials to reach storage.
-        $_POST['token'] = SecretStore::encrypt($token);
+    private static function secureUploads(): void{
+        if(empty($_FILES)||!is_array($_FILES))return;$maxBytes=10*1024*1024;$maxPixels=20_000_000;
+        $walk=function($node)use(&$walk,$maxBytes,$maxPixels){if(!is_array($node))return; if(isset($node['tmp_name'])&&is_string($node['tmp_name'])){if(($node['error']??UPLOAD_ERR_NO_FILE)!==UPLOAD_ERR_OK)return;if((int)($node['size']??0)>$maxBytes)self::jsonOrHtmlError(413,'upload_too_large','حجم فایل بیش از حد مجاز است.');$tmp=$node['tmp_name'];$mime=(new \finfo(FILEINFO_MIME_TYPE))->file($tmp);if(str_starts_with((string)$mime,'image/')){$info=@getimagesize($tmp);if(!$info||(($info[0]??0)*($info[1]??0))>$maxPixels)self::jsonOrHtmlError(422,'image_dimensions_too_large','ابعاد تصویر بیش از حد مجاز است.');}return;}foreach($node as $v)$walk($v);};foreach($_FILES as $f)$walk($f);
     }
-
-    private static function secureGlobalAiKey(): void
-    {
-        if (!Auth::check() || !Auth::isSuperAdmin()) {
-            self::jsonOrHtmlError(403, 'forbidden', 'دسترسی غیرمجاز است.');
-        }
-
-        $key = trim((string)($_POST['ai_global_key'] ?? ''));
-        if ($key === '' || $key === '••••••••') {
-            return;
-        }
-        if (str_starts_with($key, 'enc:v1:')) {
-            self::jsonOrHtmlError(422, 'invalid_secret', 'کلید هوش مصنوعی نامعتبر است.');
-        }
-        $_POST['ai_global_key'] = SecretStore::encrypt($key);
+    private static function secureChannelEdit(): void{
+        if(!Auth::check())self::jsonOrHtmlError(401,'unauthorized','نشست کاربری معتبر نیست.');$tenantId=(int)Auth::tenantId();$id=(int)($_POST['channel_id']??0);$platform=AntiAbuse::normalizePlatform((string)($_POST['platform']??''));$channelId=AntiAbuse::normalizeChannelId((string)($_POST['channel_id_val']??''));$token=trim((string)($_POST['token']??''));
+        if($tenantId<=0||$id<=0||$channelId===''||$token==='')self::jsonOrHtmlError(422,'invalid_channel','اطلاعات کانال نامعتبر است.');if(!ChannelManager::getChannel($id,$tenantId))self::jsonOrHtmlError(404,'channel_not_found','کانال مورد نظر یافت نشد.');if(str_starts_with($token,'enc:v1:'))self::jsonOrHtmlError(422,'invalid_channel_token','توکن کانال نامعتبر است());
+        $access=ChannelManager::verifyBotChannelAccess($platform,$token,$channelId);if(!$access['success'])self::jsonOrHtmlError(422,'channel_access_denied',(string)$access['message']);$_POST['token']=SecretStore::encrypt($token);
     }
-
-    private static function securityHeaders(): void
-    {
-        if (headers_sent()) return;
-        header('X-Content-Type-Options: nosniff');
-        header('Referrer-Policy: strict-origin-when-cross-origin');
-        header('Permissions-Policy: camera=(), microphone=(), geolocation=()');
-        header('X-Frame-Options: SAMEORIGIN');
+    private static function secureGlobalAiKey(): void{
+        if(!Auth::check()||!Auth::isSuperAdmin())self::jsonOrHtmlError(403,'forbidden','دسترسی غیرمجاز است.');$key=trim((string)($_POST['ai_global_key']??''));if($key===''||$key==='••••••••')return;if(str_starts_with($key,'enc:v1:'))self::jsonOrHtmlError(422,'invalid_secret','کلید هوش مصنوعی نامعتبر است.');$_POST['ai_global_key']=SecretStore::encrypt($key);
     }
-
-    private static function jsonOrHtmlError(int $status, string $code, string $message): void
-    {
-        http_response_code($status);
-        $accept = strtolower((string)($_SERVER['HTTP_ACCEPT'] ?? ''));
-        if (str_contains($accept, 'application/json') || str_contains((string)($_SERVER['HTTP_X_REQUESTED_WITH'] ?? ''), 'xmlhttprequest')) {
-            header('Content-Type: application/json; charset=utf-8');
-            echo json_encode(['success'=>false,'error'=>$code,'message'=>$message], JSON_UNESCAPED_UNICODE);
-        } else {
-            header('Content-Type: text/html; charset=utf-8');
-            echo '<!doctype html><html lang="fa" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>خطای امنیتی</title></head><body><main style="max-width:520px;margin:10vh auto;padding:24px;font-family:system-ui;text-align:center"><h1>درخواست نامعتبر است</h1><p>' . htmlspecialchars($message, ENT_QUOTES, 'UTF-8') . '</p></main></body></html>';
-        }
-        exit;
-    }
+    private static function securityHeaders(): void{if(headers_sent())return;header('X-Content-Type-Options: nosniff');header('Referrer-Policy: strict-origin-when-cross-origin');header('Permissions-Policy: camera=(), microphone=(), geolocation=()');header('X-Frame-Options: SAMEORIGIN');}
+    private static function jsonOrHtmlError(int $status,string $code,string $message): void{http_response_code($status);$accept=strtolower((string)($_SERVER['HTTP_ACCEPT']??''));if(str_contains($accept,'application/json')||str_contains((string)($_SERVER['HTTP_X_REQUESTED_WITH']??''),'xmlhttprequest')){header('Content-Type: application/json; charset=utf-8');echo json_encode(['success'=>false,'error'=>$code,'message'=>$message],JSON_UNESCAPED_UNICODE);}else{header('Content-Type: text/html; charset=utf-8');echo '<!doctype html><html lang="fa" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>خطای امنیتی</title></head><body><main style="max-width:520px;margin:10vh auto;padding:24px;font-family:system-ui;text-align:center"><h1>درخواست نامعتبر است</h1><p>'.htmlspecialchars($message,ENT_QUOTES,'UTF-8').'</p></main></body></html>';}exit;}
 }
